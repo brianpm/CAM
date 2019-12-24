@@ -22,7 +22,7 @@ subroutine courlim (vmax2d, vmax2dt, vcour)
   use pmgrid
   use pspect
   use physconst,    only: rga
-  use time_manager, only: get_nstep, is_first_step
+  use time_manager, only: get_nstep, is_nstep
   use eul_control_mod
 #ifdef SPMD
   use mpishorthand
@@ -149,7 +149,7 @@ subroutine courlim (vmax2d, vmax2dt, vcour)
   rmsdf = sqrt(0.5_r8*rmsdsum)
   rmstf = sqrt(0.5_r8*rmstsum)
   if (masterproc) then
-     if (is_first_step()) write(iulog,810)
+     if (is_nstep(1)) write(iulog,810)
      write(iulog,820) nstep, rmszf, rmsdf, rmstf, stps, stqf, cnmax, vcourmax
   end if
 !

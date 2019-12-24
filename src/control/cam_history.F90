@@ -157,6 +157,7 @@ module cam_history
                                           ! included on IC file
                                           !  .false.  include only required fields
                                           !  .true.   include required *and* optional fields
+  logical, public, protected     :: hist_write_nstep0 = .true.
   character(len=fieldname_lenp2) :: fincl(pflds,ptapes) ! List of fields to add to primary h-file
   character(len=max_chars)       :: fincllonlat(pflds,ptapes) ! List of fields to add to primary h-file
   character(len=fieldname_lenp2) :: fexcl(pflds,ptapes) ! List of fields to rm from primary h-file

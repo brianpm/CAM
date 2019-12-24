@@ -61,20 +61,6 @@ logical,     public :: cnst_fixed_ubflx(pcnst) = .false.! upper boundary non-zer
 logical, public, protected :: cnst_is_convtran1(pcnst) = .false.  ! do convective transport in phase 1
 logical, public, protected :: cnst_is_convtran2(pcnst) = .false.  ! do convective transport in phase 2
 
-!++bee - temporary... These names should be declared in the module that makes the addfld and outfld calls.
-! Lists of tracer names and diagnostics
-character(len=16), public :: apcnst    (pcnst)   ! constituents after physics  (FV core only)
-character(len=16), public :: bpcnst    (pcnst)   ! constituents before physics (FV core only)
-character(len=16), public :: hadvnam   (pcnst)   ! names of horizontal advection tendencies
-character(len=16), public :: vadvnam   (pcnst)   ! names of vertical advection tendencies
-character(len=16), public :: dcconnam  (pcnst)   ! names of convection tendencies
-character(len=16), public :: fixcnam   (pcnst)   ! names of species slt fixer tendencies
-character(len=16), public :: tendnam   (pcnst)   ! names of total tendencies of species
-character(len=16), public :: ptendnam  (pcnst)   ! names of total physics tendencies of species
-character(len=16), public :: dmetendnam(pcnst)   ! names of dme adjusted tracers (FV)
-character(len=16), public :: sflxnam   (pcnst)   ! names of surface fluxes of species
-character(len=16), public :: tottnam   (pcnst)   ! names for horz + vert + fixer tendencies
-
 ! Private data
 
 integer :: padv = 0                      ! index pointer to last advected tracer
@@ -486,20 +472,6 @@ subroutine cnst_chk_dim
                                                     cnst_type(i)
       end do
    end if
-
-   ! Set names of advected tracer diagnostics
-   do m=1,pcnst
-      apcnst    (m)  = trim(cnst_name(m))//'AP'
-      bpcnst    (m)  = trim(cnst_name(m))//'BP'
-      hadvnam   (m)  = 'HA'//cnst_name(m)
-      vadvnam   (m)  = 'VA'//cnst_name(m)
-      fixcnam   (m)  = 'DF'//cnst_name(m)
-      tendnam   (m)  = 'TE'//cnst_name(m)
-      ptendnam  (m)  = 'PTE'//cnst_name(m)
-      dmetendnam(m)  = 'DME'//cnst_name(m)
-      tottnam   (m)  = 'TA'//cnst_name(m)
-      sflxnam(m)     = 'SF'//cnst_name(m)
-   end do
 
 end subroutine cnst_chk_dim
 

@@ -22,10 +22,10 @@ contains
   !   - second call computes and outputs the tendencies
   !----------------------------------------------------------------------
   subroutine compute_adv_tends_xyz( grid, tracer )
-    use dynamics_vars, only : T_FVDYCORE_GRID
-    use cam_history,   only : outfld
-    use time_manager,  only : get_step_size
-    use constituents,  only : tottnam
+    use dynamics_vars, only: T_FVDYCORE_GRID
+    use cam_history,   only: outfld
+    use time_manager,  only: get_step_size
+    use dyn_comp,      only: tottnam
 
     implicit none
 

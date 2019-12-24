@@ -916,7 +916,7 @@ contains
 
        ! now adjust mass of each layer now that water vapor has changed
        if (( .not. online_test ) .and. (alpha .ne. D1_0 )) then
-          call physics_dme_adjust(state(c), tend(c), qini, dt)
+          call physics_dme_adjust(state(c), qini)
        endif
 
     end do

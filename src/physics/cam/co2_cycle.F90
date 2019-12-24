@@ -290,7 +290,7 @@ subroutine co2_init
 
    use cam_history,    only: addfld, add_default, horiz_only
    use co2_data_flux,  only: co2_data_flux_init
-   use constituents,   only: cnst_name, cnst_longname, sflxnam
+   use constituents,   only: cnst_name, cnst_longname
 
    ! Local variables
    integer :: m, mm
@@ -305,10 +305,8 @@ subroutine co2_init
 
       call addfld(trim(cnst_name(mm))//'_BOT', horiz_only,  'A', 'kg/kg',   trim(cnst_longname(mm))//', Bottom Layer')
       call addfld(cnst_name(mm),               (/ 'lev' /), 'A', 'kg/kg',   cnst_longname(mm))
-      call addfld(sflxnam(mm),                 horiz_only,  'A', 'kg/m2/s', trim(cnst_name(mm))//' surface flux')
 
       call add_default(cnst_name(mm), 1, ' ')
-      call add_default(sflxnam(mm),   1, ' ')
 
       ! The addfld call for the 'TM*' fields are made by default in the
       ! constituent_burden module.

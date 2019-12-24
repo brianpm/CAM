@@ -1149,7 +1149,7 @@ contains
        ! surface diagnostics for history files
        !
        call t_startf('diag_surf')
-       call diag_surf(cam_in(c), cam_out(c), phys_state(c), phys_buffer_chunk)
+       call diag_surf(cam_in(c), phys_state(c), phys_buffer_chunk)
        call t_stopf('diag_surf')
 
        call tphysac(ztodt, cam_in(c),  &

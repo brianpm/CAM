@@ -241,7 +241,7 @@ subroutine rk_stratiform_init()
    !-------------------------------------------- !
 
    use physics_buffer,  only: physics_buffer_desc, pbuf_get_index
-   use constituents,    only: cnst_get_ind, cnst_name, cnst_longname, sflxnam, apcnst, bpcnst
+   use constituents,    only: cnst_get_ind, cnst_name, cnst_longname
    use cam_history,     only: addfld, add_default, horiz_only
    use convect_shallow, only: convect_shallow_use_shfrc
    use phys_control,    only: cam_physpkg_is
@@ -277,25 +277,14 @@ subroutine rk_stratiform_init()
    do m = 1, ncnst
       call cnst_get_ind( cnst_names(m), mm )
       call addfld( cnst_name(mm), (/ 'lev' /), 'A', 'kg/kg',   cnst_longname(mm)                    )
-      call addfld( sflxnam  (mm), horiz_only,  'A', 'kg/m2/s', trim(cnst_name(mm))//' surface flux' )
       if (history_amwg) then
          call add_default( cnst_name(mm), 1, ' ' )
-         call add_default( sflxnam  (mm), 1, ' ' )
       endif
    enddo
-
-   call addfld (apcnst(ixcldliq), (/ 'lev' /), 'A', 'kg/kg', trim(cnst_name(ixcldliq))//' after physics'  )
-   call addfld (apcnst(ixcldice), (/ 'lev' /), 'A', 'kg/kg', trim(cnst_name(ixcldice))//' after physics'  )
-   call addfld (bpcnst(ixcldliq), (/ 'lev' /), 'A', 'kg/kg', trim(cnst_name(ixcldliq))//' before physics' )
-   call addfld (bpcnst(ixcldice), (/ 'lev' /), 'A', 'kg/kg', trim(cnst_name(ixcldice))//' before physics' )
 
    if( history_budget) then
       call add_default (cnst_name(ixcldliq), history_budget_histfile_num, ' ')
       call add_default (cnst_name(ixcldice), history_budget_histfile_num, ' ')
-      call add_default (apcnst   (ixcldliq), history_budget_histfile_num, ' ')
-      call add_default (apcnst   (ixcldice), history_budget_histfile_num, ' ')
-      call add_default (bpcnst   (ixcldliq), history_budget_histfile_num, ' ')
-      call add_default (bpcnst   (ixcldice), history_budget_histfile_num, ' ')
    end if
 
    call addfld ('FWAUT',      (/ 'lev' /),   'A', 'fraction', 'Relative importance of liquid autoconversion'            )

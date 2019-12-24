@@ -19,9 +19,8 @@ use prognostics,     only: n3, ps, u3, v3, t3, q3, phis, pdeld, dpsm, dpsl, div,
 
 use cam_control_mod, only: initial_run, ideal_phys, moist_physics, adiabatic
 use phys_control,    only: phys_getopts
-use constituents,    only: pcnst, cnst_name, cnst_longname, sflxnam, tendnam, &
-                           fixcnam, tottnam, hadvnam, vadvnam, cnst_get_ind,  &
-                           cnst_read_iv, qmin
+use constituents,    only: pcnst, cnst_name, cnst_longname, &
+                           cnst_get_ind, cnst_read_iv, qmin
 use cam_initfiles,   only: initial_file_get_id, topo_file_get_id, pertlim
 use inic_analytic,   only: analytic_ic_active, analytic_ic_set_ic
 use dyn_tests_utils, only: vc_moist_pressure
@@ -68,6 +67,11 @@ type dyn_export_t
    integer :: placeholder
 end type dyn_export_t
 
+character(len=16), public :: hadvnam(pcnst)   ! names of horizontal advection tendencies
+character(len=16), public :: vadvnam(pcnst)   ! names of vertical advection tendencies
+character(len=16), public :: fixcnam(pcnst)   ! names of species slt fixer tendencies
+character(len=16), public :: tendnam(pcnst)   ! names of total tendencies of species
+character(len=16), public :: tottnam(pcnst)   ! names for horz + vert + fixer tendencies
 
 real(r8), allocatable :: ps_tmp  (:,:  )
 real(r8), allocatable :: phis_tmp(:,:  )
@@ -273,6 +277,13 @@ subroutine dyn_init(dyn_in, dyn_out)
    call add_default ('T&IC',0, 'I')
 
    do m = 1, pcnst
+
+      hadvnam(m) = 'HA'//cnst_name(m)
+      vadvnam(m) = 'VA'//cnst_name(m)
+      fixcnam(m) = 'DF'//cnst_name(m)
+      tendnam(m) = 'TE'//cnst_name(m)
+      tottnam(m) = 'TA'//cnst_name(m)
+
       call addfld (trim(cnst_name(m))//'&IC',(/ 'lev' /),'I', 'kg/kg',cnst_longname(m), gridname='gauss_grid' )
       call add_default(trim(cnst_name(m))//'&IC',0, 'I')
       call addfld (hadvnam(m), (/ 'lev' /), 'A', 'kg/kg/s',trim(cnst_name(m))//' horizontal advection tendency',  &

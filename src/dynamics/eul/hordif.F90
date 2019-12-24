@@ -110,10 +110,7 @@ subroutine hordif(k,ztdt)
 ! Define damping rate for divergence damper
 !
    zdt = get_step_size()
-
-!   ztodt = 2._r8*zdt
-!   if (is_first_step()) ztodt = .5_r8*ztodt
-    ztodt = ztdt	
+   ztodt = ztdt	
 !
 ! Initial damping rate (e-folding time = zdt) and then linearly decrease
 ! to 0. over number of days specified by "divdampn".

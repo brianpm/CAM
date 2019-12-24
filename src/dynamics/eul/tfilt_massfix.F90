@@ -42,9 +42,8 @@ subroutine tfilt_massfixrun (ztodt,         lat,    u3m1,   u3,     &
    use eul_control_mod, only: fixmas,eps
    use pmgrid,          only: plon, plev, plevp, plat
    use commap,          only: clat
-   use constituents,    only: pcnst, qmin, cnst_cam_outfld, &
-                           tottnam, tendnam, cnst_get_type_byind, fixcnam, &
-                           hadvnam, vadvnam
+   use constituents,    only: pcnst, qmin, cnst_cam_outfld, cnst_get_type_byind
+   use dyn_comp,        only: hadvnam, vadvnam, fixcnam, tendnam, tottnam
    use time_manager,    only: get_nstep
    use physconst,       only: cpair, gravit
    use scamMod,         only: single_column, dqfxcam
@@ -382,7 +381,7 @@ subroutine tfilt_massfixrun (ztodt,         lat,    u3m1,   u3,     &
 
    om2eps = 1._r8 - 2._r8*eps
 
-   if (nstep.ge.2) then
+   if (nstep >= 3) then
 !$OMP PARALLEL DO PRIVATE (K, I, M)
       do k=1,plev
          do i=1,nlon

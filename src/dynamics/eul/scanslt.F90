@@ -358,7 +358,6 @@ subroutine scanslt_run(adv_state, ztodt   ,etadot   ,detam, etamid, cwava )
       call t_stopf ('bndexch')
 #endif
 
-      nstep = get_nstep()
 !
 ! Initialize extended arrays
 !
@@ -368,7 +367,7 @@ subroutine scanslt_run(adv_state, ztodt   ,etadot   ,detam, etamid, cwava )
       call t_stopf('sltini')
    endif
    nstep = get_nstep()
-   if (nstep .le. 1) then
+   if (nstep <= 2) then
       iter = itermx
    else
       iter = itermn

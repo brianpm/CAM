@@ -1,37 +1,55 @@
 module stepon
 
-use shr_kind_mod,   only: r8 => shr_kind_r8
-use spmd_utils,     only: iam, mpicom
-use ppgrid,         only: begchunk, endchunk
+!----------------------------------------------------------------------- 
+! stepon provides a standard interface that is called from the higher level
+! CAM component run methods while leaving non-standardized dycore interface
+! methods to be called from this layer.  Plan is to move the
+! stardardization into the dynamics interface layer.
+!-----------------------------------------------------------------------
 
-use physics_types,  only: physics_state, physics_tend
-use dyn_comp,       only: dyn_import_t, dyn_export_t
+use shr_kind_mod,    only: r8 => shr_kind_r8
+use spmd_utils,      only: iam, mpicom
+use ppgrid,          only: begchunk, endchunk
+use constituents,    only: pcnst, cnst_name, cnst_longname
+use camsrfexch,      only: cam_out_t
 
-use perf_mod,       only: t_startf, t_stopf, t_barrierf
-use cam_abortutils, only: endrun
+use dyn_grid,        only: TimeLevel
+use dyn_comp,        only: dyn_import_t, dyn_export_t, dyn_run
+use advect_tend,     only: compute_adv_tends_xyz
 
-use parallel_mod,   only: par
-use dimensions_mod, only: nelemd
+use dp_coupling,     only: d_p_coupling, p_d_coupling
+
+use physics_types,   only: physics_state, physics_tend
+use physics_buffer,  only: physics_buffer_desc
+
+use cam_history,     only: addfld, add_default, horiz_only
+use time_manager,    only: get_step_size
+
+use perf_mod,        only: t_startf, t_stopf, t_barrierf
+use cam_abortutils,  only: endrun
+
+use parallel_mod,    only: par
+use dimensions_mod,  only: nelemd, fv_nphys, cnst_name_gll, cnst_longname_gll, qsize
+use time_mod,        only: TimeLevel_Qdp
+use control_mod,     only: qsplit
+use prim_advance_mod,only: calc_tot_energy_dynamics
 
 implicit none
 private
 save
 
-public stepon_init
-public stepon_run1
-public stepon_run2
-public stepon_run3
-public stepon_final
+public :: &
+   stepon_init, &! Initialize
+   stepon_d_p,  &! dynamics to physics coupling
+   stepon_p_d,  &! physics to dynamics coupling
+   stepon_run,  &! run dycore
+   stepon_final  ! Finalize
 
 !=========================================================================================
 contains
 !=========================================================================================
 
-subroutine stepon_init(dyn_in, dyn_out )
-
-   use cam_history,    only: addfld, add_default, horiz_only
-   use constituents,   only: pcnst, cnst_name, cnst_longname
-   use dimensions_mod, only: fv_nphys, cnst_name_gll, cnst_longname_gll, qsize
+subroutine stepon_init(dyn_in, dyn_out)
 
    ! arguments
    type (dyn_import_t), intent(inout) :: dyn_in  ! Dynamics import container
@@ -76,28 +94,21 @@ end subroutine stepon_init
 
 !=========================================================================================
 
-subroutine stepon_run1( dtime_out, phys_state, phys_tend,               &
-                        pbuf2d, dyn_in, dyn_out )
+subroutine stepon_d_p(phys_state, phys_tend, pbuf2d, dyn_in, dyn_out, dtime_out)
 
-   use time_manager,   only: get_step_size
-   use dp_coupling,    only: d_p_coupling
-   use physics_buffer, only: physics_buffer_desc
+   ! transform from dynamics structures -> phys structures
 
-   use time_mod,       only: tstep                    ! dynamics timestep
-
-   real(r8),             intent(out)   :: dtime_out   ! Time-step
    type(physics_state),  intent(inout) :: phys_state(begchunk:endchunk)
    type(physics_tend),   intent(inout) :: phys_tend(begchunk:endchunk)
+   type (physics_buffer_desc), pointer :: pbuf2d(:,:)
    type (dyn_import_t),  intent(inout) :: dyn_in  ! Dynamics import container
    type (dyn_export_t),  intent(inout) :: dyn_out ! Dynamics export container
-   type (physics_buffer_desc), pointer :: pbuf2d(:,:)
+   real(r8),             intent(out)   :: dtime_out   ! Time-step
    !----------------------------------------------------------------------------
 
    dtime_out = get_step_size()
 
    if (iam < par%nprocs) then
-      if (tstep <= 0)      call endrun('stepon_run1: bad tstep')
-      if (dtime_out <= 0)  call endrun('stepon_run1: bad dtime')
 
       ! write diagnostic fields on gll grid and initial file
       call diag_dynvar_ic(dyn_out%elem, dyn_out%fvm)
@@ -105,27 +116,21 @@ subroutine stepon_run1( dtime_out, phys_state, phys_tend,               &
 
    call t_barrierf('sync_d_p_coupling', mpicom)
    call t_startf('d_p_coupling')
-   ! Move data into phys_state structure.
-   call d_p_coupling(phys_state, phys_tend,  pbuf2d, dyn_out )
+   call d_p_coupling(phys_state, phys_tend,  pbuf2d, dyn_out)
    call t_stopf('d_p_coupling')
 
-end subroutine stepon_run1
+end subroutine stepon_d_p
 
 !=========================================================================================
 
-subroutine stepon_run2(phys_state, phys_tend, dyn_in, dyn_out)
+subroutine stepon_p_d(phys_state, phys_tend, pbuf2d, dyn_in, dyn_out)
 
-   use dp_coupling,            only: p_d_coupling
-   use dyn_grid,               only: TimeLevel
-
-   use time_mod,               only: TimeLevel_Qdp
-   use control_mod,            only: qsplit
-   use prim_advance_mod,       only: calc_tot_energy_dynamics
-
+   ! transform from phys structures -> dynamics structures
 
    ! arguments
    type(physics_state), intent(inout) :: phys_state(begchunk:endchunk)
    type(physics_tend),  intent(inout) :: phys_tend(begchunk:endchunk)
+   type(physics_buffer_desc), pointer :: pbuf2d(:,:)
    type (dyn_import_t), intent(inout) :: dyn_in  ! Dynamics import container
    type (dyn_export_t), intent(inout) :: dyn_out ! Dynamics export container
 
@@ -138,7 +143,6 @@ subroutine stepon_run2(phys_state, phys_tend, dyn_in, dyn_out)
 
    call t_barrierf('sync_p_d_coupling', mpicom)
    call t_startf('p_d_coupling')
-   ! copy from phys structures -> dynamics structures
    call p_d_coupling(phys_state, phys_tend, dyn_in, tl_f, tl_fQdp)
    call t_stopf('p_d_coupling')
 
@@ -146,24 +150,17 @@ subroutine stepon_run2(phys_state, phys_tend, dyn_in, dyn_out)
       call calc_tot_energy_dynamics(dyn_in%elem,dyn_in%fvm, 1, nelemd, tl_f, tl_fQdp,'dED')
    end if
 
-end subroutine stepon_run2
+end subroutine stepon_p_d
 
 !=========================================================================================
 
-subroutine stepon_run3(dtime, cam_out, phys_state, dyn_in, dyn_out)
+subroutine stepon_run(phys_state, dyn_in, dyn_out, cam_out)
 
-   use camsrfexch,     only: cam_out_t
-   use dyn_comp,       only: dyn_run
-   use advect_tend,    only: compute_adv_tends_xyz
-   use dyn_grid,       only: TimeLevel
-   use time_mod,       only: TimeLevel_Qdp
-   use control_mod,    only: qsplit   
    ! arguments
-   real(r8),            intent(in)    :: dtime   ! Time-step
-   type(cam_out_t),     intent(inout) :: cam_out(:) ! Output from CAM to surface
    type(physics_state), intent(inout) :: phys_state(begchunk:endchunk)
    type (dyn_import_t), intent(inout) :: dyn_in  ! Dynamics import container
    type (dyn_export_t), intent(inout) :: dyn_out ! Dynamics export container
+   type(cam_out_t),     intent(inout) :: cam_out(:) ! Output from CAM to surface
 
    integer :: tl_f, tl_fQdp
    !--------------------------------------------------------------------------------------
@@ -185,7 +182,7 @@ subroutine stepon_run3(dtime, cam_out, phys_state, dyn_in, dyn_out)
    call compute_adv_tends_xyz(dyn_in%elem,dyn_in%fvm,1,nelemd,tl_fQdp,tl_f)
    call t_stopf('comp_adv_tends2')   
 
-end subroutine stepon_run3
+end subroutine stepon_run
 
 !=========================================================================================
 
@@ -197,8 +194,11 @@ subroutine stepon_final(dyn_in, dyn_out)
 end subroutine stepon_final
 
 !=========================================================================================
+! Private routines
+!=========================================================================================
 
 subroutine diag_dynvar_ic(elem, fvm)
+
    use constituents,           only: cnst_type
    use cam_history,            only: write_inithist, outfld, hist_fld_active, fieldname_len
    use dyn_grid,               only: TimeLevel

@@ -766,7 +766,7 @@ end function chem_is_active
     use cam_abortutils,        only : endrun
     use aero_model,            only : aero_model_init
     use mo_setsox,             only : sox_inti
-    use constituents,          only : sflxnam
+    use cam_diagnostics,       only : sflxnam
     use noy_ubc,             only : noy_ubc_init
     use fire_emissions,      only : fire_emissions_init
     use short_lived_species, only : short_lived_species_initic
@@ -971,7 +971,7 @@ end function chem_is_active
   subroutine chem_emissions( state, cam_in )
     use aero_model,       only: aero_model_emissions
     use camsrfexch,       only: cam_in_t     
-    use constituents,     only: sflxnam
+    use cam_diagnostics,  only: sflxnam
     use cam_history,      only: outfld
     use mo_srf_emissions, only: set_srf_emissions
     use fire_emissions,   only: fire_emissions_srf

@@ -396,7 +396,7 @@ subroutine d_p_coupling(phys_state, phys_tend,  pbuf2d, dyn_out)
    ! ps, pdel, and q in phys_state are all dry at this point.  After return from derived_phys_dry
    ! ps and pdel include water vapor only, and the 'wet' constituents have been converted to wet mmr.
    call t_startf('derived_phys')
-   call derived_phys_dry(phys_state, phys_tend, pbuf2d)
+   call derived_phys_dry(phys_state, pbuf2d)
    call t_stopf('derived_phys')
 
   !$omp parallel do num_threads(max_num_threads) private (lchnk, ncols, ilyr, icol)
@@ -729,7 +729,7 @@ end subroutine p_d_coupling
 
 !=========================================================================================
 
-subroutine derived_phys_dry(phys_state, phys_tend, pbuf2d)
+subroutine derived_phys_dry(phys_state, pbuf2d)
 
    ! The ps, pdel, and q components of phys_state are all dry on input.
    ! On output the psdry and pdeldry components are initialized; ps and pdel are
@@ -749,7 +749,6 @@ subroutine derived_phys_dry(phys_state, phys_tend, pbuf2d)
 
    ! arguments
    type(physics_state), intent(inout), dimension(begchunk:endchunk) :: phys_state
-   type(physics_tend ), intent(inout), dimension(begchunk:endchunk) :: phys_tend
    type(physics_buffer_desc),      pointer     :: pbuf2d(:,:)
 
    ! local variables
@@ -896,7 +895,7 @@ subroutine derived_phys_dry(phys_state, phys_tend, pbuf2d)
 
       ! Compute energy and water integrals of input state
       pbuf_chnk => pbuf_get_chunk(pbuf2d, lchnk)
-      call check_energy_timestep_init(phys_state(lchnk), phys_tend(lchnk), pbuf_chnk)
+      call check_energy_timestep_init(phys_state(lchnk), pbuf_chnk)
 
 
    end do  ! lchnk

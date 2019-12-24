@@ -6,7 +6,7 @@ use shr_kind_mod,           only: r8=>shr_kind_r8, shr_kind_cl
 use physconst,              only: pi
 use spmd_utils,             only: iam, masterproc
 use constituents,           only: pcnst, cnst_get_ind, cnst_name, cnst_longname, &
-                                  cnst_read_iv, qmin, cnst_type, tottnam
+                                  cnst_read_iv, qmin, cnst_type
 use cam_control_mod,        only: initial_run
 use cam_initfiles,          only: initial_file_get_id, topo_file_get_id, pertlim
 use phys_control,           only: use_gw_front, use_gw_front_igw
@@ -74,6 +74,8 @@ logical, public, protected :: write_restart_unstruct
 ! Frontogenesis indices
 integer, public    :: frontgf_idx      = -1
 integer, public    :: frontga_idx      = -1
+
+character(len=16), public :: tottnam(pcnst)   ! names for horz + vert tendencies
 
 interface read_dyn_var
   module procedure read_dyn_field_2d
@@ -867,9 +869,10 @@ subroutine dyn_init(dyn_in, dyn_out)
       end do
    end do
 
-   !
    ! add dynamical core tracer tendency output
-   !
+   do m = 1, pcnst
+      tottnam(m) = 'TA'//cnst_name(m)
+   end do
    if (ntrac>0) then
      do m = 1, pcnst
        call addfld(tottnam(m),(/ 'lev' /),'A','kg/kg/s',trim(cnst_name(m))//' horz + vert',  &

@@ -290,7 +290,7 @@ CONTAINS
 
 ! Compute energy and water integrals of input state
        pbuf_chnk => pbuf_get_chunk(pbuf2d, lchnk)
-       call check_energy_timestep_init(phys_state(lchnk), phys_tend(lchnk), pbuf_chnk )
+       call check_energy_timestep_init(phys_state(lchnk), pbuf_chnk )
 
     end do
 

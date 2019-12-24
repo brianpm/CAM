@@ -36,8 +36,8 @@
       use comspe
       use commap
       use physconst, only: rearth
-      use time_manager, only: get_step_size, is_first_step
       use spmd_utils, only: iam
+
       implicit none
 
 !
@@ -81,16 +81,10 @@
 ! Set constants
 !
       mlength = numm(iam)
-!      dtime = get_step_size()
 
       zrcsj = 1._r8/(cs(irow)*rearth)
       ztdtrc = ztodt*zrcsj
 
-!      if (is_first_step()) then
-!         ztdtrc = dtime*zrcsj
-!      else
-!         ztdtrc = 2.0_r8*dtime*zrcsj
-!      end if
 !
 ! Combine constants with Fourier wavenumber m
 !

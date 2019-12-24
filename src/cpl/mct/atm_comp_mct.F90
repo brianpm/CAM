@@ -27,7 +27,7 @@ module atm_comp_mct
 
   use cam_cpl_indices
   use atm_import_export
-  use cam_comp,          only: cam_init, cam_run1, cam_run2, cam_run3, cam_run4, cam_final
+  use cam_comp,          only: cam_init, cam_run_phys_only, cam_run, cam_final
   use cam_instance     , only: cam_instance_init, inst_suffix, inst_index
   use cam_control_mod  , only: cam_ctrl_set_orbit
   use radiation        , only: radiation_nextsw_cday
@@ -40,8 +40,8 @@ module atm_comp_mct
   use cam_abortutils   , only: endrun
   use filenames        , only: interpret_filename_spec
   use spmd_utils       , only: spmdinit, masterproc, iam
-  use time_manager     , only: get_curr_calday, advance_timestep, get_curr_date, get_nstep, &
-                               get_step_size
+  use time_manager     , only: get_curr_calday, get_curr_date, get_nstep, &
+                               get_step_size, advance_timestep
   use ioFileMod
   use perf_mod
   use cam_logfile      , only: iulog
@@ -350,12 +350,11 @@ CONTAINS
        call seq_timemgr_EClockGetData(EClock, StepNo=StepNo)
        if (StepNo == 0) then
           call atm_import( x2a_a%rattr, cam_in )
-          call cam_run1 ( cam_in, cam_out )
+          call cam_run_phys_only( cam_in, cam_out )
           call atm_export( cam_out, a2x_a%rattr )
        else
           call atm_read_srfrest_mct( EClock, x2a_a, a2x_a )
           call atm_import( x2a_a%rattr, cam_in, restart_init=.true. )
-          call cam_run1 ( cam_in, cam_out )
        end if
 
        ! Compute time of next radiation computation, like in run method for exact restart
@@ -477,51 +476,28 @@ CONTAINS
     dosend = .false.
     do while (.not. dosend)
 
-       ! Determine if dosend
-       ! When time is not updated at the beginning of the loop - then return only if
-       ! are in sync with clock before time is updated
+       ! Increment CAM clock by the timestep about to be taken.
+       call advance_timestep()
 
+       ! Determine if dosend
        call get_curr_date( yr, mon, day, tod )
        ymd = yr*10000 + mon*100 + day
        tod = tod
        dosend = (seq_timemgr_EClockDateInSync( EClock, ymd, tod))
 
        ! Determine if time to write cam restart and stop
-
        rstwr = .false.
        if (rstwr_sync .and. dosend) rstwr = .true.
        nlend = .false.
        if (nlend_sync .and. dosend) nlend = .true.
 
-       ! Run CAM (run2, run3, run4)
-
-       call t_startf ('CAM_run2')
-       call cam_run2( cam_out, cam_in )
-       call t_stopf  ('CAM_run2')
-
-       call t_startf ('CAM_run3')
-       call cam_run3( cam_out )
-       call t_stopf  ('CAM_run3')
-
-       call t_startf ('CAM_run4')
-       call cam_run4( cam_out, cam_in, rstwr, nlend, &
+       ! Run CAM
+       call t_startf ('CAM_run')
+       call cam_run( cam_out, cam_in, rstwr, nlend, &
             yr_spec=yr_sync, mon_spec=mon_sync, day_spec=day_sync, sec_spec=tod_sync)
-       call t_stopf  ('CAM_run4')
-
-       ! Advance cam time step
-
-       call t_startf ('CAM_adv_timestep')
-       call advance_timestep()
-       call t_stopf  ('CAM_adv_timestep')
-
-       ! Run cam radiation/clouds (run1)
-
-       call t_startf ('CAM_run1')
-       call cam_run1 ( cam_in, cam_out )
-       call t_stopf  ('CAM_run1')
+       call t_stopf  ('CAM_run')
 
        ! Map output from cam to mct data structures
-
        call t_startf ('CAM_export')
        call atm_export( cam_out, a2x_a%rattr )
        call t_stopf ('CAM_export')
@@ -553,9 +529,7 @@ CONTAINS
     end if
 
     ! Check for consistency of internal cam clock with master sync clock
-
-    dtime = get_step_size()
-    call get_curr_date( yr, mon, day, tod, offset=-dtime )
+    call get_curr_date(yr, mon, day, tod)
     ymd = yr*10000 + mon*100 + day
     tod = tod
     if ( .not. seq_timemgr_EClockDateInSync( EClock, ymd, tod ) )then

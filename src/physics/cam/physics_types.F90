@@ -17,8 +17,6 @@ module physics_types
   implicit none
   private          ! Make default type private to the module
 
-  logical, parameter :: adjust_te = .FALSE.
-
 ! Public types:
 
   public physics_state
@@ -504,7 +502,7 @@ contains
     ! Double precision positive/negative infinity.
     real(r8) :: posinf_r8, neginf_r8
     ! Canned message.
-    character(len=64) :: msg
+    character(len=128) :: msg
     ! Constituent index
     integer :: m
 
@@ -1132,143 +1130,60 @@ end subroutine physics_ptend_copy
   end subroutine init_geo_unique
 
 !===============================================================================
-  subroutine physics_dme_adjust(state, tend, qini, dt)
-    !-----------------------------------------------------------------------
-    !
-    ! Purpose: Adjust the dry mass in each layer back to the value of physics input state
-    !
-    ! Method: Conserve the integrated mass, momentum and total energy in each layer
-    !         by scaling the specific mass of consituents, specific momentum (velocity)
-    !         and specific total energy by the relative change in layer mass. Solve for
-    !         the new temperature by subtracting the new kinetic energy from total energy
-    !         and inverting the hydrostatic equation
-    !
-    !         The mass in each layer is modified, changing the relationship of the layer
-    !         interfaces and midpoints to the surface pressure. The result is no longer in
-    !         the original hybrid coordinate.
-    !
-    !         This procedure cannot be applied to the "eul" or "sld" dycores because they
-    !         require the hybrid coordinate.
-    !
-    ! Author: Byron Boville
 
-    ! !REVISION HISTORY:
-    !   03.03.28  Boville    Created, partly from code by Lin in p_d_adjust
-    !
-    !-----------------------------------------------------------------------
+subroutine physics_dme_adjust(state, qini)
 
-    use constituents, only : cnst_get_type_byind
-    use ppgrid,       only : begchunk, endchunk
+   !-----------------------------------------------------------------------
+   !
+   ! Purpose: Adjust the dry mass in each layer back to the value of physics input state
+   !
+   !         The mass in each layer is modified, changing the relationship of the layer
+   !         interfaces and midpoints to the surface pressure. The result is no longer in
+   !         the original hybrid coordinate.
+   !
+   !         This procedure cannot be applied to the "eul" or "sld" dycores because they
+   !         require the hybrid coordinate.
+   !
+   !  03.03.28  Boville    Created, partly from code by Lin in p_d_adjust
+   !
+   !-----------------------------------------------------------------------
 
-    implicit none
-    !
-    ! Arguments
-    !
-    type(physics_state), intent(inout) :: state
-    type(physics_tend ), intent(inout) :: tend
-    real(r8),            intent(in   ) :: qini(pcols,pver)    ! initial specific humidity
-    real(r8),            intent(in   ) :: dt                  ! model physics timestep
-    !
-    !---------------------------Local workspace-----------------------------
-    !
-    integer  :: lchnk         ! chunk identifier
-    integer  :: ncol          ! number of atmospheric columns
-    integer  :: i,k,m         ! Longitude, level indices
-    real(r8) :: fdq(pcols)    ! mass adjustment factor
-    real(r8) :: te(pcols)     ! total energy in a layer
-    real(r8) :: utmp(pcols)   ! temp variable for recalculating the initial u values
-    real(r8) :: vtmp(pcols)   ! temp variable for recalculating the initial v values
+   ! Arguments
+   type(physics_state), intent(inout) :: state
+   real(r8),            intent(in   ) :: qini(pcols,pver)    ! initial specific humidity
 
-    real(r8) :: zvirv(pcols,pver)    ! Local zvir array pointer
+   ! Local variables
+   integer  :: ncol          ! number of atmospheric columns
+   integer  :: k,m
+   real(r8) :: fdq(pcols)    ! mass adjustment factor
+   !-----------------------------------------------------------------------
 
-    real(r8),allocatable :: cpairv_loc(:,:)
-    !
-    !-----------------------------------------------------------------------
+   if (state%psetcols .ne. pcols) then
+      call endrun('physics_dme_adjust: cannot pass in a state which has sub-columns')
+   end if
 
-    if (state%psetcols .ne. pcols) then
-       call endrun('physics_dme_adjust: cannot pass in a state which has sub-columns')
-    end if
-    if (adjust_te) then
-       call endrun('physics_dme_adjust: must update code based on the "correct" energy before turning on "adjust_te"')
-    end if
+   ncol  = state%ncol
 
-    lchnk = state%lchnk
-    ncol  = state%ncol
+   state%ps(:ncol) = state%pint(:ncol,1)
+   do k = 1, pver
 
-    ! adjust dry mass in each layer back to input value, while conserving
-    ! constituents, momentum, and total energy
-    state%ps(:ncol) = state%pint(:ncol,1)
-    do k = 1, pver
+      ! adjusment factor is just change in water vapor
+      fdq(:ncol) = 1._r8 + state%q(:ncol,k,1) - qini(:ncol,k)
 
-       ! adjusment factor is just change in water vapor
-       fdq(:ncol) = 1._r8 + state%q(:ncol,k,1) - qini(:ncol,k)
+      ! adjust constituent mmr to conserve mass in each layer
+      do m = 1, pcnst
+         state%q(:ncol,k,m) = state%q(:ncol,k,m) / fdq(:ncol)
+      end do
 
-       ! adjust constituents to conserve mass in each layer
-       do m = 1, pcnst
-          state%q(:ncol,k,m) = state%q(:ncol,k,m) / fdq(:ncol)
-       end do
+      ! compute new total pressure variables
+      state%pdel  (:ncol,k  ) = state%pdel(:ncol,k  ) * fdq(:ncol)
+      state%ps(:ncol)         = state%ps(:ncol)       + state%pdel(:ncol,k)
+      state%pint  (:ncol,k+1) = state%pint(:ncol,k  ) + state%pdel(:ncol,k)
+      state%lnpint(:ncol,k+1) = log(state%pint(:ncol,k+1))
+      state%rpdel (:ncol,k  ) = 1._r8/ state%pdel(:ncol,k  )
+   end do
 
-       if (adjust_te) then
-          ! compute specific total energy of unadjusted state (J/kg)
-          te(:ncol) = state%s(:ncol,k) + 0.5_r8*(state%u(:ncol,k)**2 + state%v(:ncol,k)**2)
-
-          ! recompute initial u,v from the new values and the tendencies
-          utmp(:ncol) = state%u(:ncol,k) - dt * tend%dudt(:ncol,k)
-          vtmp(:ncol) = state%v(:ncol,k) - dt * tend%dvdt(:ncol,k)
-          ! adjust specific total energy and specific momentum (velocity) to conserve each
-          te     (:ncol)   = te     (:ncol)     / fdq(:ncol)
-          state%u(:ncol,k) = state%u(:ncol,k  ) / fdq(:ncol)
-          state%v(:ncol,k) = state%v(:ncol,k  ) / fdq(:ncol)
-          ! compute adjusted u,v tendencies
-          tend%dudt(:ncol,k) = (state%u(:ncol,k) - utmp(:ncol)) / dt
-          tend%dvdt(:ncol,k) = (state%v(:ncol,k) - vtmp(:ncol)) / dt
-
-          ! compute adjusted static energy
-          state%s(:ncol,k) = te(:ncol) - 0.5_r8*(state%u(:ncol,k)**2 + state%v(:ncol,k)**2)
-       end if
-
-! compute new total pressure variables
-       state%pdel  (:ncol,k  ) = state%pdel(:ncol,k  ) * fdq(:ncol)
-       state%ps(:ncol)         = state%ps(:ncol)       + state%pdel(:ncol,k)
-       state%pint  (:ncol,k+1) = state%pint(:ncol,k  ) + state%pdel(:ncol,k)
-       state%lnpint(:ncol,k+1) = log(state%pint(:ncol,k+1))
-       state%rpdel (:ncol,k  ) = 1._r8/ state%pdel(:ncol,k  )
-    end do
-
-    if ( waccmx_is('ionosphere') .or. waccmx_is('neutral') ) then
-      zvirv(:,:) = shr_const_rwv / rairv(:,:,state%lchnk) - 1._r8
-    else
-      zvirv(:,:) = zvir
-    endif
-
-! compute new T,z from new s,q,dp
-    if (adjust_te) then
-
-! cpairv_loc needs to be allocated to a size which matches state and ptend
-! If psetcols == pcols, cpairv is the correct size and just copy into cpairv_loc
-! If psetcols > pcols and all cpairv match cpair, then assign the constant cpair
-
-       allocate(cpairv_loc(state%psetcols,pver))
-       if (state%psetcols == pcols) then
-          cpairv_loc(:,:) = cpairv(:,:,state%lchnk)
-       else if (state%psetcols > pcols .and. all(cpairv(:,:,:) == cpair)) then
-          cpairv_loc(:,:) = cpair
-       else
-          call endrun('physics_dme_adjust: cpairv is not allowed to vary when subcolumns are turned on')
-       end if
-
-       call geopotential_dse(state%lnpint, state%lnpmid, state%pint,  &
-            state%pmid  , state%pdel    , state%rpdel,  &
-            state%s     , state%q(:,:,1), state%phis , rairv(:,:,state%lchnk), &
-            gravit, cpairv_loc(:,:), zvirv, &
-            state%t     , state%zi      , state%zm   , ncol)
-
-       deallocate(cpairv_loc)
-
-    end if
-
-  end subroutine physics_dme_adjust
-!-----------------------------------------------------------------------
+end subroutine physics_dme_adjust
 
 !===============================================================================
   subroutine physics_state_copy(state_in, state_out)
@@ -1365,29 +1280,21 @@ end subroutine physics_ptend_copy
   end subroutine physics_state_copy
 !===============================================================================
 
-  subroutine physics_tend_init(tend)
+subroutine physics_tend_init(tend)
 
-    implicit none
+   ! Arguments
+   type(physics_tend), intent(inout) :: tend
 
-    !
-    ! Arguments
-    !
-    type(physics_tend), intent(inout) :: tend
+   if (.not. allocated(tend%dtdt)) then
+      call endrun('physics_tend_init: tend must be allocated before it can be initialized')
+   end if
 
-    !
-    ! Local variables
-    !
-
-    if (.not. allocated(tend%dtdt)) then
-       call endrun('physics_tend_init: tend must be allocated before it can be initialized')
-    end if
-
-    tend%dtdt    = 0._r8
-    tend%dudt    = 0._r8
-    tend%dvdt    = 0._r8
-    tend%flx_net = 0._r8
-    tend%te_tnd  = 0._r8
-    tend%tw_tnd  = 0._r8
+   tend%dtdt    = 0._r8
+   tend%dudt    = 0._r8
+   tend%dvdt    = 0._r8
+   tend%flx_net = 0._r8
+   tend%te_tnd  = 0._r8
+   tend%tw_tnd  = 0._r8
 
 end subroutine physics_tend_init
 

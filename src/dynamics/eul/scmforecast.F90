@@ -60,7 +60,7 @@ contains
                                  scm_relaxation,scm_use_obs_qv,scm_use_obs_t,scm_use_obs_uv,scm_zadv_q,scm_zadv_t, &
                                  scm_zadv_uv,tdiff,tobs,uobs,use_3dfrc,use_camiop,vertdivq, &
                                  vertdivt,vertdivu,vertdivv,vobs,wfld,qinitobs,scm_relax_fincl
-     use time_manager,     only : get_curr_calday, get_nstep, get_step_size, is_first_step
+     use time_manager,     only : is_nstep
      use cam_abortutils,   only : endrun
      use string_utils,     only: to_upper
 
@@ -170,7 +170,7 @@ contains
      real(r8) rycept ! [optional] y-intercept for linear relaxtion profile
 
 !+++ BPM check what we have:
-     if (masterproc .and. is_first_step()) write(iulog,*) 'SCAM FORECAST REPORT: ' ,  &
+     if (masterproc .and. is_nstep(1)) write(iulog,*) 'SCAM FORECAST REPORT: ' ,  &
           'have_divq     ',  have_divq      ,  &
           'have_divt     ',  have_divt      ,  &
           'have_divq3d   ',  have_divq3d    ,  &

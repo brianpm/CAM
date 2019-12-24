@@ -24,7 +24,6 @@ subroutine dyndrv(grlps1,  grt1,    grz1,    grd1,    grfu1,    &
    use pspect
    use comspe
    use commap
-!   use time_manager, only: get_step_size, is_first_step
    use spmd_utils, only: iam
    use perf_mod
 
@@ -91,10 +90,6 @@ subroutine dyndrv(grlps1,  grt1,    grz1,    grd1,    grfu1,    &
 
    ztdt = ztodt
    zdt = ztdt/2       	
-!   zdt = get_step_size()
-!   if (is_first_step()) zdt = .5_r8*zdt
-!   ztdt = 2._r8*zdt
-
    
    do n=1,pnmax
       ztdtsq(n) = ztdt*sq(n)

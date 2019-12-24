@@ -1,45 +1,70 @@
 module cam_comp
+
 !-----------------------------------------------------------------------
 !
 ! Community Atmosphere Model (CAM) component interfaces.
 !
 ! This interface layer is CAM specific, i.e., it deals entirely with CAM
 ! specific data structures.  It is the layer above this, either atm_comp_mct
-! or atm_comp_esmf, which translates between CAM and either MCT or ESMF
+! or atm_comp_nuopc, which translates between CAM and either MCT or ESMF/NUOPC
 ! data structures in order to interface with the driver/coupler.
 !
 !-----------------------------------------------------------------------
 
-use shr_kind_mod,      only: r8 => SHR_KIND_R8, cl=>SHR_KIND_CL, cs=>SHR_KIND_CS
-use shr_sys_mod,       only: shr_sys_flush
+use shr_kind_mod,         only: r8 => SHR_KIND_R8, cl=>SHR_KIND_CL, cs=>SHR_KIND_CS
+use shr_sys_mod,          only: shr_sys_flush
 
-use spmd_utils,        only: masterproc, mpicom
-use cam_control_mod,   only: cam_ctrl_init, cam_ctrl_set_orbit
-use runtime_opts,      only: read_namelist
-use time_manager,      only: timemgr_init, get_step_size, &
-                             get_nstep, is_first_step, is_first_restart_step
+use spmd_utils,           only: masterproc, mpicom
+use cam_instance,         only: inst_suffix
+use cam_control_mod,      only: cam_ctrl_init, cam_ctrl_set_orbit, initial_run
+use runtime_opts,         only: read_namelist
+use cam_initfiles,        only: cam_initfiles_open, cam_initfiles_close
+use cam_restart,          only: cam_read_restart
+use chem_surfvals,        only: chem_surfvals_init
 
-use camsrfexch,        only: cam_out_t, cam_in_t
-use ppgrid,            only: begchunk, endchunk
-use physics_types,     only: physics_state, physics_tend
-use dyn_comp,          only: dyn_import_t, dyn_export_t
+use camsrfexch,           only: cam_out_t, cam_in_t, hub2atm_alloc, atm2hub_alloc, &
+                                atm2hub_deallocate, hub2atm_deallocate
 
-use physics_buffer,    only: physics_buffer_desc
-use offline_driver,    only: offline_driver_init, offline_driver_dorun, offline_driver_run
+use dyn_grid,             only: dyn_grid_init
+use dyn_comp,             only: dyn_import_t, dyn_export_t, dyn_init
+use stepon,               only: stepon_init, stepon_d_p, stepon_p_d, stepon_run, &
+                                stepon_final
 
-use perf_mod
-use cam_logfile,       only: iulog
-use cam_abortutils,    only: endrun
+use ppgrid,               only: begchunk, endchunk
+use physics_types,        only: physics_state, physics_tend
+use physics_buffer,       only: physics_buffer_desc
+use phys_grid,            only: phys_grid_init
+use phys_comp,            only: phys_register, phys_init, phys_run, phys_final
+
+use ionosphere_interface, only: ionosphere_init, ionosphere_run1, ionosphere_final
+
+use offline_driver,       only: offline_driver_init, offline_driver_dorun, offline_driver_run
+
+use cam_pio_utils,        only: init_pio_subsystem
+use cam_history,          only: intht, wshist, wrapup, hist_write_nstep0
+use cam_restart,          only: cam_write_restart
+use qneg_module,          only: qneg_print_summary
+use time_manager,         only: timemgr_init, get_step_size, get_nstep, is_first_step, &
+                                is_first_restart_step, is_last_step
+use perf_mod,             only: t_startf, t_stopf, t_barrierf
+use cam_logfile,          only: iulog
+use cam_abortutils,       only: endrun
+
+use history_scam,         only: scm_intht
+use history_defaults,     only: bldfld
+#if (defined BFB_CAM_SCAM_IOP)
+use history_defaults,     only: initialize_iop_history
+#endif
 
 implicit none
 private
+save
 
-public cam_init      ! First phase of CAM initialization
-public cam_run1      ! CAM run method phase 1
-public cam_run2      ! CAM run method phase 2
-public cam_run3      ! CAM run method phase 3
-public cam_run4      ! CAM run method phase 4
-public cam_final     ! CAM Finalization
+public :: &
+   cam_init,          & ! Initialize infrastructure, dycore, parameterizations
+   cam_run_phys_only, & ! Run the physics package to provide surface fields to coupler
+   cam_run,           & ! Run complete timestep
+   cam_final            ! Finalize CAM
 
 type(dyn_import_t) :: dyn_in   ! Dynamics import container
 type(dyn_export_t) :: dyn_out  ! Dynamics export container
@@ -48,12 +73,9 @@ type(physics_state),       pointer :: phys_state(:) => null()
 type(physics_tend ),       pointer :: phys_tend(:) => null()
 type(physics_buffer_desc), pointer :: pbuf2d(:,:) => null()
 
-real(r8) :: dtime_phys         ! Time step for physics tendencies.  Set by call to
-                               ! stepon_run1, then passed to the phys_run*
-
-!-----------------------------------------------------------------------
+!=========================================================================================
 contains
-!-----------------------------------------------------------------------
+!=========================================================================================
 
 subroutine cam_init( &
    caseid, ctitle, model_doi_url, &
@@ -66,32 +88,11 @@ subroutine cam_init( &
    stop_ymd, stop_tod, curr_ymd, curr_tod, &
    cam_out, cam_in)
 
-   !-----------------------------------------------------------------------
+   !----------------------------------------------------------------------------
    !
    ! CAM component initialization.
    !
-   !-----------------------------------------------------------------------
-
-   use history_defaults, only: bldfld
-   use cam_initfiles,    only: cam_initfiles_open
-   use dyn_grid,         only: dyn_grid_init
-   use phys_grid,        only: phys_grid_init
-   use physpkg,          only: phys_register, phys_init
-   use chem_surfvals,    only: chem_surfvals_init
-   use dyn_comp,         only: dyn_init
-   use cam_restart,      only: cam_read_restart
-   use stepon,           only: stepon_init
-   use ionosphere_interface, only: ionosphere_init
-   use camsrfexch,       only: hub2atm_alloc, atm2hub_alloc
-   use cam_history,      only: intht
-   use history_scam,     only: scm_intht
-   use cam_pio_utils,    only: init_pio_subsystem
-   use cam_instance,     only: inst_suffix
-
-#if (defined BFB_CAM_SCAM_IOP)
-   use history_defaults, only: initialize_iop_history
-#endif
-
+   !----------------------------------------------------------------------------
 
    ! Arguments
    character(len=cl), intent(in) :: caseid                ! case ID
@@ -132,7 +133,7 @@ subroutine cam_init( &
 
    ! Local variables
    character(len=cs) :: filein      ! Input namelist filename
-   !-----------------------------------------------------------------------
+   !----------------------------------------------------------------------------
 
    call init_pio_subsystem()
 
@@ -206,165 +207,55 @@ subroutine cam_init( &
 
 end subroutine cam_init
 
-!
-!-----------------------------------------------------------------------
-!
-subroutine cam_run1(cam_in, cam_out)
-!-----------------------------------------------------------------------
-!
-! Purpose:   First phase of atmosphere model run method.
-!            Runs first phase of dynamics and first phase of
-!            physics (before surface model updates).
-!
-!-----------------------------------------------------------------------
+!=========================================================================================
 
-   use physpkg,          only: phys_run1
-   use stepon,           only: stepon_run1
-   use ionosphere_interface,only: ionosphere_run1
+subroutine cam_run_phys_only(cam_in, cam_out)
+
+   ! The first run of the physics package provides surface fields for the coupler.
 
    type(cam_in_t)  :: cam_in(begchunk:endchunk)
    type(cam_out_t) :: cam_out(begchunk:endchunk)
-
-   !-----------------------------------------------------------------------
+   
+   ! local variables
+   real(r8) :: dtime_phys ! Time step for physics tendencies.
+   !----------------------------------------------------------------------------
 
    if (offline_driver_dorun) return
 
-   !----------------------------------------------------------
-   ! First phase of dynamics (at least couple from dynamics to physics)
-   ! Return time-step for physics from dynamics.
-   !----------------------------------------------------------
-   call t_barrierf ('sync_stepon_run1', mpicom)
-   call t_startf ('stepon_run1')
-   call stepon_run1( dtime_phys, phys_state, phys_tend, pbuf2d, dyn_in, dyn_out )
-   call t_stopf  ('stepon_run1')
+   ! Couple from dynamics to physics data structures.
+   ! Return time-step for physics tendencies.
+   call t_barrierf('sync_stepon_d_p', mpicom)
+   call t_startf('stepon_d_p')
+   call stepon_d_p(phys_state, phys_tend, pbuf2d, dyn_in, dyn_out, dtime_phys)
+   call t_stopf('stepon_d_p')
 
-   !----------------------------------------------------------
    ! first phase of ionosphere -- write to IC file if needed
-   !----------------------------------------------------------
    call ionosphere_run1(pbuf2d)
 
-   !
-   !----------------------------------------------------------
-   ! PHYS_RUN Call the Physics package
-   !----------------------------------------------------------
-   !
-   call t_barrierf ('sync_phys_run1', mpicom)
-   call t_startf ('phys_run1')
-   call phys_run1(phys_state, dtime_phys, phys_tend, pbuf2d,  cam_in, cam_out)
-   call t_stopf  ('phys_run1')
+   ! Run the physics package
+   call t_barrierf('sync_phys_run', mpicom)
+   call t_startf('phys_run')
+   call phys_run(dtime_phys, phys_state, phys_tend, pbuf2d,  cam_in, cam_out)
+   call t_stopf('phys_run')
 
-end subroutine cam_run1
-
-!
-!-----------------------------------------------------------------------
-!
-
-subroutine cam_run2( cam_out, cam_in )
-!-----------------------------------------------------------------------
-!
-! Purpose:   Second phase of atmosphere model run method.
-!            Run the second phase physics, run methods that
-!            require the surface model updates.  And run the
-!            second phase of dynamics that at least couples
-!            between physics to dynamics.
-!
-!-----------------------------------------------------------------------
-
-   use physpkg,          only: phys_run2
-   use stepon,           only: stepon_run2
-   use ionosphere_interface, only: ionosphere_run2
-
-   type(cam_out_t), intent(inout) :: cam_out(begchunk:endchunk)
-   type(cam_in_t),  intent(inout) :: cam_in(begchunk:endchunk)
-
-   if (offline_driver_dorun) then
-      call offline_driver_run( phys_state, pbuf2d, cam_out, cam_in )
-      return
-   endif
-
-   !
-   ! Second phase of physics (after surface model update)
-   !
-   call t_barrierf ('sync_phys_run2', mpicom)
-   call t_startf ('phys_run2')
-   call phys_run2(phys_state, dtime_phys, phys_tend, pbuf2d,  cam_out, cam_in )
-   call t_stopf  ('phys_run2')
-
-   !
-   ! Second phase of dynamics (at least couple from physics to dynamics)
-   !
-   call t_barrierf ('sync_stepon_run2', mpicom)
-   call t_startf ('stepon_run2')
-   call stepon_run2( phys_state, phys_tend, dyn_in, dyn_out )
-   call t_stopf  ('stepon_run2')
-
-   !
-   ! Ion transport
-   !
-   call t_startf('ionosphere_run2')
-   call ionosphere_run2( phys_state, dyn_in, pbuf2d )
-   call t_stopf ('ionosphere_run2')
-
-   if (is_first_step() .or. is_first_restart_step()) then
-      call t_startf ('cam_run2_memusage')
-      call t_stopf  ('cam_run2_memusage')
+   ! Write nstep=0 history buffers to disk if requested
+   if (hist_write_nstep0) then
+      call t_barrierf('sync_wshist', mpicom)
+      call t_startf('wshist')
+      call wshist()
+      call t_stopf('wshist')
    end if
-end subroutine cam_run2
 
-!
-!-----------------------------------------------------------------------
-!
+end subroutine cam_run_phys_only
 
-subroutine cam_run3( cam_out )
-!-----------------------------------------------------------------------
-!
-! Purpose:  Third phase of atmosphere model run method. This consists
-!           of the third phase of the dynamics. For some dycores
-!           this will be the actual dynamics run, for others the
-!           dynamics happens before physics in phase 1.
-!
-!-----------------------------------------------------------------------
-   use stepon,           only: stepon_run3
+!=========================================================================================
 
-   type(cam_out_t), intent(inout) :: cam_out(begchunk:endchunk)
-!-----------------------------------------------------------------------
+subroutine cam_run(cam_out, cam_in, rstwr, nlend, &
+                   yr_spec, mon_spec, day_spec, sec_spec)
 
-   if (offline_driver_dorun) return
+   ! Run complete timestep
 
-   !
-   ! Third phase of dynamics
-   !
-   call t_barrierf ('sync_stepon_run3', mpicom)
-   call t_startf ('stepon_run3')
-   call stepon_run3( dtime_phys, cam_out, phys_state, dyn_in, dyn_out )
-
-   call t_stopf  ('stepon_run3')
-
-   if (is_first_step() .or. is_first_restart_step()) then
-      call t_startf ('cam_run3_memusage')
-      call t_stopf  ('cam_run3_memusage')
-   end if
-end subroutine cam_run3
-
-!
-!-----------------------------------------------------------------------
-!
-
-subroutine cam_run4( cam_out, cam_in, rstwr, nlend, &
-                     yr_spec, mon_spec, day_spec, sec_spec )
-
-!-----------------------------------------------------------------------
-!
-! Purpose:  Final phase of atmosphere model run method. This consists
-!           of all the restart output, history writes, and other
-!           file output.
-!
-!-----------------------------------------------------------------------
-   use cam_history,      only: wshist, wrapup
-   use cam_restart,      only: cam_write_restart
-   use qneg_module,      only: qneg_print_summary
-   use time_manager,     only: is_last_step
-
+   ! arguments
    type(cam_out_t), intent(inout)        :: cam_out(begchunk:endchunk)
    type(cam_in_t) , intent(inout)        :: cam_in(begchunk:endchunk)
    logical            , intent(in)           :: rstwr           ! true => write restart file
@@ -374,67 +265,82 @@ subroutine cam_run4( cam_out, cam_in, rstwr, nlend, &
    integer            , intent(in), optional :: day_spec        ! Simulation day
    integer            , intent(in), optional :: sec_spec        ! Seconds into current simulation day
 
-   !----------------------------------------------------------
-   ! History and restart logic: Write and/or dispose history tapes if required
-   !----------------------------------------------------------
-   !
-   call t_barrierf ('sync_wshist', mpicom)
-   call t_startf ('wshist')
-   call wshist ()
-   call t_stopf  ('wshist')
+   ! local variables
+   real(r8) :: dtime_phys ! Time step for physics tendencies.
+   !----------------------------------------------------------------------------
 
-   !
+   if (offline_driver_dorun) then
+      call offline_driver_run( phys_state, pbuf2d, cam_out, cam_in )
+      return
+   endif
+
+   ! transform physics to dynamics data structures
+   call t_barrierf('sync_stepon_p_d', mpicom)
+   call t_startf('stepon_p_d')
+   call stepon_p_d(phys_state, phys_tend, pbuf2d, dyn_in, dyn_out)
+   call t_stopf('stepon_p_d')
+
+   ! run dycore
+   call t_barrierf('sync_stepon_run', mpicom)
+   call t_startf('stepon_run')
+   call stepon_run(phys_state, dyn_in, dyn_out, cam_out)
+   call t_stopf('stepon_run')
+
+   ! transform from dynamics to physics data structures.
+   ! Return time-step for physics tendencies.
+   call t_barrierf('sync_stepon_d_p', mpicom)
+   call t_startf('stepon_d_p')
+   call stepon_d_p(phys_state, phys_tend, pbuf2d, dyn_in, dyn_out, dtime_phys)
+   call t_stopf('stepon_d_p')
+
+   ! run physics package
+   call t_barrierf ('sync_phys_run', mpicom)
+   call t_startf('phys_run')
+   call phys_run(dtime_phys, phys_state, phys_tend, pbuf2d, cam_in, cam_out)
+   call t_stopf('phys_run')
+
+   ! Write history buffers to disk
+   call t_barrierf('sync_wshist', mpicom)
+   call t_startf('wshist')
+   call wshist()
+   call t_stopf('wshist')
+
    ! Write restart files
-   !
    if (rstwr) then
-      call t_startf ('cam_write_restart')
+      call t_startf('cam_write_restart')
       if (present(yr_spec).and.present(mon_spec).and.present(day_spec).and.present(sec_spec)) then
          call cam_write_restart(cam_in, cam_out, dyn_out, pbuf2d, &
-              yr_spec=yr_spec, mon_spec=mon_spec, day_spec=day_spec, sec_spec= sec_spec )
+              yr_spec=yr_spec, mon_spec=mon_spec, day_spec=day_spec, sec_spec= sec_spec)
       else
-         call cam_write_restart(cam_in, cam_out, dyn_out, pbuf2d )
+         call cam_write_restart(cam_in, cam_out, dyn_out, pbuf2d)
       end if
-      call t_stopf  ('cam_write_restart')
+      call t_stopf('cam_write_restart')
    end if
 
-   call t_startf ('cam_run4_wrapup')
+   ! close files as appropriate
+   call t_startf('cam_run4_wrapup')
    call wrapup(rstwr, nlend)
-   call t_stopf  ('cam_run4_wrapup')
+   call t_stopf('cam_run4_wrapup')
 
    call qneg_print_summary(is_last_step())
 
    call shr_sys_flush(iulog)
 
-end subroutine cam_run4
+end subroutine cam_run
 
-!
-!-----------------------------------------------------------------------
-!
+!=========================================================================================
 
-subroutine cam_final( cam_out, cam_in )
-!-----------------------------------------------------------------------
-!
-! Purpose:  CAM finalization.
-!
-!-----------------------------------------------------------------------
-   use stepon,           only: stepon_final
-   use physpkg,          only: phys_final
-   use cam_initfiles,    only: cam_initfiles_close
-   use camsrfexch,       only: atm2hub_deallocate, hub2atm_deallocate
-   use ionosphere_interface, only: ionosphere_final
-   use cam_control_mod,  only: initial_run
+subroutine cam_final(cam_out, cam_in)
 
-   !
    ! Arguments
-   !
    type(cam_out_t), pointer :: cam_out(:) ! Output from CAM to surface
    type(cam_in_t),  pointer :: cam_in(:)   ! Input from merged surface to CAM
 
    ! Local variables
    integer :: nstep           ! Current timestep number.
-   !-----------------------------------------------------------------------
+   !----------------------------------------------------------------------------
 
-   call phys_final( phys_state, phys_tend , pbuf2d)
+   call phys_final(phys_state, phys_tend, pbuf2d)
    call stepon_final(dyn_in, dyn_out)
    call ionosphere_final()
 
@@ -454,16 +360,14 @@ subroutine cam_final( cam_out, cam_in )
 
    if (masterproc) then
       nstep = get_nstep()
-      write(iulog,9300) nstep-1,nstep
-9300  format (//'Number of completed timesteps:',i6,/,'Time step ',i6, &
-                ' partially done to provide convectively adjusted and ', &
-                'time filtered values for history tape.')
+      write(iulog,9300) nstep
+9300  format (//'Number of completed timesteps:',i6)
       write(iulog,*)' '
       write(iulog,*)'******* END OF MODEL RUN *******'
    end if
 
 end subroutine cam_final
 
-!-----------------------------------------------------------------------
+!=========================================================================================
 
 end module cam_comp

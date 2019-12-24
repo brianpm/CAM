@@ -33,6 +33,7 @@ public ::&
    get_curr_calday,          &! return calendar day at end of current timestep
    get_calday,               &! return calendar day from input date
    is_first_step,            &! return true on first step of initial run
+   is_nstep,                 &! return true when current step number equals input step number.
    is_first_restart_step,    &! return true on first step of restart or branch run
    timemgr_is_caltype,       &! return true if incoming calendar type string matches actual calendar type in use
    timemgr_get_calendar_cf,  &! return cf standard for calendar type
@@ -978,6 +979,27 @@ logical function is_first_step()
    is_first_step = (nstep == 0)
 
 end function is_first_step
+!=========================================================================================
+
+logical function is_nstep(n)
+
+   ! Return true when current step number matches given argument
+   integer, intent(in) :: n
+
+   ! Local variables
+   integer(ESMF_KIND_I8) :: step_no
+   integer :: rc
+   integer :: nstep
+   character(len=*), parameter :: sub = 'is_first_step'
+!-----------------------------------------------------------------------------------------
+
+   call ESMF_ClockGet( tm_clock, advanceCount=step_no, rc=rc )
+   call chkrc(rc, sub//': error return from ESMF_ClockGet')
+   nstep = step_no
+   is_nstep = (nstep == n)
+
+end function is_nstep
+
 !=========================================================================================
 
 logical function is_first_restart_step()

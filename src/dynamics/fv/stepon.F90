@@ -1,29 +1,36 @@
 module stepon
 
 !----------------------------------------------------------------------
-! stepon provides the interface layer that allows the different dynamical
-! cores to be called from different locations in the time loop.  It also
-! provides a standard interface that is called from the higher level CAM   
-! component run methods while leaving non-standardized dycore interface
-! methods to be called from this layer.  Ideally only the run methods
-! which allow flexibility in the dynamics/physics calling sequence should
-! remain.  The init and finalize methods should be removed and their
-! functionality incorporated in the dycore init and finalize.
+! stepon provides a standard interface that is called from the higher level
+! CAM component run methods while leaving non-standardized dycore interface
+! methods to be called from this layer.  Plan is to move the
+! stardardization into the dynamics interface layer.
 !----------------------------------------------------------------------
 
 use shr_kind_mod,       only: r8 => shr_kind_r8
-
 use spmd_utils,         only: mpicom, iam, masterproc
-use cam_control_mod,    only: initial_run, moist_physics
+
 use ppgrid,             only: begchunk, endchunk
-use physconst,          only: zvir, cappa
+use constituents,       only: pcnst
+use physconst,          only: zvir, cappa, physconst_calc_kappav, rair, cpair
 
-use physics_types,      only: physics_state, physics_tend
+use camsrfexch,         only: cam_out_t    
+use cam_control_mod,    only: initial_run, moist_physics
+use inic_analytic,      only: analytic_ic_active
 
-use dyn_comp,           only: dyn_import_t, dyn_export_t, initial_mr
+use dyn_comp,           only: dyn_import_t, dyn_export_t, initial_mr, dyn_run
 use dynamics_vars,      only: t_fvdycore_state, t_fvdycore_grid
 use dyn_internal_state, only: get_dyn_state, get_dyn_state_grid
+use advect_tend,        only: compute_adv_tends_xyz
 
+use dp_coupling,        only: d_p_coupling, p_d_coupling
+
+use physics_types,      only: physics_state, physics_tend
+use physics_buffer,     only: physics_buffer_desc
+
+use fv_prints,          only: fv_out
+
+use time_manager,       only: get_step_size, get_curr_date
 use cam_logfile,        only: iulog
 use cam_abortutils,     only: endrun
 use perf_mod,           only: t_startf, t_stopf, t_barrierf
@@ -34,14 +41,13 @@ save
 
 public :: &
    stepon_init,  &! Initialization
-   stepon_run1,  &! run method phase 1
-   stepon_run2,  &! run method phase 2
-   stepon_run3,  &! run method phase 3
+   stepon_d_p,   &! dynamics to physics coupling
+   stepon_p_d,   &! physics to dynamics coupling
+   stepon_run,   &! run dycore
    stepon_final   ! Finalization
 
-integer :: pdt       ! Physics time step
-real(r8) :: dtime    ! Physics time step
-real(r8) :: te0            ! Total energy before dynamics
+integer  :: pdt        ! Physics time step
+real(r8) :: te0        ! Total energy before dynamics
 
 ! for fv_out
 logical, parameter :: fv_monitor=.true.  ! Monitor Mean/Max/Min fields
@@ -54,11 +60,6 @@ contains
 !=========================================================================================
 
 subroutine stepon_init(dyn_in, dyn_out)
-
-   use constituents, only: pcnst
-   use time_manager, only: get_step_size
-   use physconst,    only: physconst_calc_kappav, rair, cpair
-   use inic_analytic,      only: analytic_ic_active
 
    type (dyn_import_t)   :: dyn_in             ! Dynamics import container
    type (dyn_export_t)   :: dyn_out            ! Dynamics export container
@@ -95,9 +96,6 @@ subroutine stepon_init(dyn_in, dyn_out)
    ptop   =  grid%ptop
    ak     => grid%ak
    bk     => grid%bk
-
-   pdt = get_step_size()    ! Physics time step
-   dtime = pdt
 
    do j = jfirstxy, jlastxy
       do i=ifirstxy, ilastxy
@@ -204,16 +202,14 @@ subroutine stepon_init(dyn_in, dyn_out)
 
    if (initial_run) then
 
-      ! Compute pt for initial run: scaled virtual potential temperature
-      ! defined as (virtual temp deg K)/pkz. pt will be written to restart (SJL)
+      ! pt is output by the dycore as virtual temperature.  This is what d_p_coupling
+      ! expects for input
 
 !$omp parallel do private(i,j,k)
       do k = 1, km
          do j = jfirstxy, jlastxy
             do i = ifirstxy, ilastxy
-               dyn_in%pt(i,j,k) =  dyn_in%t3(i,j,k)*            &
-                (1._r8 + zvir*dyn_in%tracer(i,j,k,1))    &
-                /dyn_in%pkz(i,j,k) 
+               dyn_in%pt(i,j,k) = dyn_in%t3(i,j,k)*(1._r8 + zvir*dyn_in%tracer(i,j,k,1))
             enddo
          enddo
       enddo
@@ -258,237 +254,146 @@ end subroutine stepon_init
 
 !=========================================================================================
 
-subroutine stepon_run1( dtime_out, phys_state, phys_tend, pbuf2d,        &
-                        dyn_in, dyn_out )
-
-   ! Phase 1 run of FV dynamics. Run the dynamics, and couple to physics.
-
-   use dp_coupling,       only: d_p_coupling
-   use dyn_comp,          only: dyn_run
-   
-   use physics_buffer,    only: physics_buffer_desc
-   use advect_tend,       only: compute_adv_tends_xyz
+subroutine stepon_d_p(phys_state, phys_tend, pbuf2d, &
+                      dyn_in, dyn_out, dtime_phys)
 
    ! arguments
-   real(r8),            intent(out)   :: dtime_out   ! Time-step
    type(physics_state), intent(inout) :: phys_state(begchunk:endchunk)
    type(physics_tend),  intent(inout) :: phys_tend(begchunk:endchunk)
    type(physics_buffer_desc), pointer :: pbuf2d(:,:)
-   type(dyn_import_t)                 :: dyn_in  ! Dynamics import container
-   type(dyn_export_t)                 :: dyn_out ! Dynamics export container
+   type(dyn_import_t)                 :: dyn_in       ! Dynamics import container
+   type(dyn_export_t)                 :: dyn_out      ! Dynamics export container
+   real(r8),            intent(out)   :: dtime_phys   ! physics package time-step
 
-   type(T_FVDYCORE_STATE), pointer :: dyn_state
+   ! local variables
+   type(T_FVDYCORE_GRID),  pointer :: grid
+   !----------------------------------------------------------------------------
 
-   integer  :: rc 
+   pdt = get_step_size()    ! physics step size
+   dtime_phys = real(pdt, r8)
 
-   dtime_out = dtime
-   dyn_state => get_dyn_state()
+   grid => get_dyn_state_grid()
 
    ! Dump state variables to IC file
    call t_barrierf('sync_diag_dynvar_ic', mpicom)
    call t_startf ('diag_dynvar_ic')
-   call diag_dynvar_ic (dyn_state%grid, dyn_out%phis, dyn_out%ps,             &
+   call diag_dynvar_ic (grid, dyn_out%phis, dyn_out%ps,             &
                         dyn_out%t3, dyn_out%u3s, dyn_out%v3s, dyn_out%tracer  )
    call t_stopf  ('diag_dynvar_ic')
 
-   call t_startf ('comp_adv_tends1')
-   call compute_adv_tends_xyz(dyn_state%grid, dyn_in%tracer )
-   call t_stopf  ('comp_adv_tends1')
-   !
-   !--------------------------------------------------------------------------
-   ! Perform finite-volume dynamics -- this dynamical core contains some 
-   ! yet to be published algorithms. Its use in the CAM is
-   ! for software development purposes only. 
-   ! Please contact S.-J. Lin (Shian-Jiann.Lin@noaa.gov)
-   ! if you plan to use this mudule for scientific purposes. Contact S.-J. Lin
-   ! or Will Sawyer (sawyer@gmao.gsfc.nasa.gov) if you plan to modify the
-   ! software.
-   !--------------------------------------------------------------------------
-
-   !----------------------------------------------------------
-   ! For 2-D decomposition, phisxy is input to dynpkg, and the other
-   ! xy variables are output. Some are computed through direct
-   ! transposes, and others are derived.
-   !----------------------------------------------------------
-   call t_barrierf('sync_dyn_run', mpicom)
-   call t_startf ('dyn_run')
-   call dyn_run(ptop,      pdt,     te0,         &
-                dyn_state, dyn_in,  dyn_out,  rc )
-   if ( rc /= 0 ) then
-     write(iulog,*) "STEPON_RUN: dyn_run returned bad error code", rc
-     write(iulog,*) "Quitting."
-     call endrun
-   endif 
-   call t_stopf  ('dyn_run')
-
-   call t_startf ('comp_adv_tends2')
-   call compute_adv_tends_xyz(dyn_state%grid, dyn_out%tracer )
-   call t_stopf  ('comp_adv_tends2')
-
-   !----------------------------------------------------------
-   ! Move data into phys_state structure.
-   !----------------------------------------------------------
+   ! Couple from dynamics to physics
    call t_barrierf('sync_d_p_coupling', mpicom)
    call t_startf('d_p_coupling')
-   call d_p_coupling(dyn_state%grid, phys_state, phys_tend,  pbuf2d, dyn_out)
+   call d_p_coupling(grid, phys_state, phys_tend,  pbuf2d, dyn_out)
    call t_stopf('d_p_coupling')
 
-!EOC
-end subroutine stepon_run1
+end subroutine stepon_d_p
 
-!-----------------------------------------------------------------------
+!=========================================================================================
 
-!----------------------------------------------------------------------- 
-!BOP
-! !ROUTINE:  stepon_run2 -- second phase run method
-!
-! !INTERFACE:
-subroutine stepon_run2( phys_state, phys_tend, dyn_in, dyn_out )
-! !USES:
-   use dp_coupling,      only: p_d_coupling
-!
-! !INPUT/OUTPUT PARAMETERS:
-!
+subroutine stepon_p_d(phys_state, phys_tend, pbuf2d, dyn_in, dyn_out)
+
+   ! INPUT/OUTPUT PARAMETERS:
    type(physics_state), intent(inout) :: phys_state(begchunk:endchunk)
    type(physics_tend),  intent(inout) :: phys_tend(begchunk:endchunk)
-   type (dyn_import_t), intent(inout) :: dyn_in  ! Dynamics import container
-   type (dyn_export_t), intent(inout) :: dyn_out ! Dynamics export container
+   type(physics_buffer_desc), pointer :: pbuf2d(:,:)
+   type(dyn_import_t),  intent(inout) :: dyn_in  ! Dynamics import container
+   type(dyn_export_t),  intent(inout) :: dyn_out ! Dynamics export container
 
-   type (T_FVDYCORE_GRID), pointer :: grid
-!
-! !DESCRIPTION:
-!
-! Second phase run method. Couple from physics to dynamics.
-!
-!EOP
-!-----------------------------------------------------------------------
-!BOC
+   ! local variables
+   real(r8) :: dtime_phys ! Physics time step
+   type(T_FVDYCORE_GRID),  pointer :: grid
 
-!-----------------------------------------------------------------------
+   integer :: rc 
+   !-----------------------------------------------------------------------
 
-   !----------------------------------------------------------
-   ! Update dynamics variables using phys_state & phys_tend.
-   ! 2-D decomposition: Compute ptxy and q3xy; for ideal
-   !   physics, scale ptxy by (old) pkzxy; then transpose to yz variables
-   ! 1-D decomposition: Compute dudt, dvdt, pt and q3; for ideal physics,
-   !   scale pt by old pkz.
-   ! Call uv3s_update to update u3s and v3s from dudt and dvdt.
-   ! Call p_d_adjust to update pt, q3, pe, delp, ps, piln, pkz and pk.
-   ! For adiabatic case, transpose to yz variables.
-   !----------------------------------------------------------
+   dtime_phys = real(pdt, r8)
    grid => get_dyn_state_grid()
 
    call t_barrierf('sync_p_d_coupling', mpicom)
    call t_startf ('p_d_coupling')
-   call p_d_coupling(grid, phys_state, phys_tend, &
-                     dyn_in, dtime, zvir, cappa, ptop)
+   call p_d_coupling(grid, phys_state, phys_tend, pbuf2d, &
+                     dyn_in, dtime_phys, zvir, cappa, ptop)
    call t_stopf  ('p_d_coupling')
 
-!EOC
-end subroutine stepon_run2
+end subroutine stepon_p_d
 
-!-----------------------------------------------------------------------
+!=========================================================================================
 
-subroutine stepon_run3(dtime, cam_out, phys_state,             &
-                        dyn_in, dyn_out )
-! !USES:
-   use time_manager,     only: get_curr_date
-   use fv_prints,        only: fv_out
-   use camsrfexch,       only: cam_out_t    
-!
-! !INPUT PARAMETERS:
-!
-   type(physics_state), intent(in):: phys_state(begchunk:endchunk)
-   real(r8), intent(in) :: dtime            ! Time-step
+subroutine stepon_run(phys_state, dyn_in, dyn_out, cam_out)
+
+   ! arguments
+   type(physics_state), intent(in)    :: phys_state(begchunk:endchunk)
    type (dyn_import_t), intent(inout) :: dyn_in  ! Dynamics import container
    type (dyn_export_t), intent(inout) :: dyn_out ! Dynamics export container
-!
-! !INPUT/OUTPUT PARAMETERS:
-!
-   type(cam_out_t), intent(inout) :: cam_out(begchunk:endchunk)
-!
-! !DESCRIPTION:
-!
-!	Final run phase of dynamics. Some printout and time index updates.
-!
-! !HISTORY:
-!   2005.09.16  Kluzek     Creation
-!   2006.04.13  Sawyer     Removed shift_time_indices (not needed in FV)
-!
-!EOP
-!-----------------------------------------------------------------------
-!BOC
-!
-! !LOCAL VARIABLES:
-!
+   type(cam_out_t),     intent(inout) :: cam_out(begchunk:endchunk)
 
-   type(t_fvdycore_state), pointer :: state
-   type(t_fvdycore_grid),  pointer :: grid
-   integer :: ncdate            ! current date in integer format [yyyymmdd]
-   integer :: ncsec             ! time of day relative to current date [seconds]
+   ! LOCAL VARIABLES:
    integer :: yr, mon, day      ! year, month, day components of a date
-   integer :: ncsecp
-   integer :: freq_diag
+   integer :: ncsec             ! time of day relative to current date [seconds]
+   integer :: ncdate            ! current date in integer format [yyyymmdd]
 
-   !----------------------------------------------------------
+   type(t_fvdycore_state), pointer :: dyn_state
+   type(t_fvdycore_grid),  pointer :: grid
+
+   integer :: freq_diag
+   integer :: rc
+   !----------------------------------------------------------------------------
+
    ! Monitor max/min/mean of selected fields
-   !
-   !  SEE BELOW  ****  SEE BELOW  ****  SEE BELOW
-   
-   ! Beware that fv_out uses both dynamics and physics instantiations.
-   ! However, I think that they are used independently, so that the
-   ! answers are correct. Still, this violates the notion that the
-   ! physics state is no longer active after p_d_coupling.
-   !----------------------------------------------------------
+   ! Note that fv_out uses both dynamics and physics instantiations.
+
    call get_curr_date(yr, mon, day, ncsec)
    ncdate = yr*10000 + mon*100 + day
-   ncsecp = ncsec + pdt      !  step complete, but nstep not incremented yet
 
-   state => get_dyn_state()
-   freq_diag = state%check_dt
+   dyn_state => get_dyn_state()
+   grid => dyn_state%grid
 
-   if (fv_monitor .and. mod(ncsecp, freq_diag) == 0) then
-      grid => state%grid
+   freq_diag = dyn_state%check_dt
+
+   if (fv_monitor .and. mod(ncsec, freq_diag) == 0) then
 
       call t_barrierf('sync_fv_out', mpicom)
       call t_startf('fv_out')
       call fv_out(grid, dyn_out%pk, dyn_out%pt,         &
                   ptop, dyn_out%ps, dyn_out%tracer,     &
                   dyn_out%delp, dyn_out%pe, cam_out,    &
-                   phys_state, ncdate, ncsecp, moist_physics)
+                  phys_state, ncdate, ncsec, moist_physics)
       call t_stopf('fv_out')
    endif
 
-!EOC
-end subroutine stepon_run3
+   call t_startf('comp_adv_tends1')
+   call compute_adv_tends_xyz(grid, dyn_in%tracer )
+   call t_stopf('comp_adv_tends1')
 
-!-----------------------------------------------------------------------
+   call t_barrierf('sync_dyn_run', mpicom)
+   call t_startf('dyn_run')
+   call dyn_run(ptop,      pdt,     te0,         &
+                dyn_state, dyn_in,  dyn_out,  rc)
+   if ( rc /= 0 ) then
+     write(iulog,*) "STEPON_RUN: dyn_run returned bad error code", rc
+     write(iulog,*) "Quitting."
+     call endrun
+   endif 
+   call t_stopf('dyn_run')
 
-!----------------------------------------------------------------------- 
-!BOP
-! !ROUTINE:  stepon_final --- Dynamics finalization
-!
-! !INTERFACE:
+   call t_startf('comp_adv_tends2')
+   call compute_adv_tends_xyz(grid, dyn_out%tracer )
+   call t_stopf('comp_adv_tends2')
+
+end subroutine stepon_run
+
+!=========================================================================================
+
 subroutine stepon_final(dyn_in, dyn_out)
 
-! !PARAMETERS:
-  type (dyn_import_t), intent(out) :: dyn_in  ! Dynamics import container
-  type (dyn_export_t), intent(out) :: dyn_out ! Dynamics export container
-!
-! !DESCRIPTION:
-!
-! Deallocate data needed for dynamics. Finalize any dynamics specific
-! files or subroutines.
-!
-!EOP
-!-----------------------------------------------------------------------
-!BOC
+   ! arguments
+   type (dyn_import_t), intent(out) :: dyn_in  ! Dynamics import container
+   type (dyn_export_t), intent(out) :: dyn_out ! Dynamics export container
+   !----------------------------------------------------------------------------
 
-!!! Not yet ready for the call to dyn_final
-!!! call dyn_final( RESTART_FILE, dyn_state, dyn_in, dyn_out )
-!EOC
 end subroutine stepon_final
 
-!-----------------------------------------------------------------------
+!=========================================================================================
 
 end module stepon

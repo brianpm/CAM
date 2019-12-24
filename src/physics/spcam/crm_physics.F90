@@ -17,7 +17,7 @@ module crm_physics
    use cam_abortutils,  only: endrun
    use physics_types,   only: physics_state, physics_tend
    use constituents,    only: cnst_add, cnst_get_ind, cnst_set_spec_class, cnst_spec_class_cldphysics, &
-                              cnst_spec_class_gas, cnst_name, cnst_longname, sflxnam, apcnst, bpcnst, pcnst
+                              cnst_spec_class_gas, cnst_name, cnst_longname, pcnst
 #ifdef m2005
    use module_ecpp_ppdriver2,   only: papampollu_init
    use crmx_ecppvars,   only: NCLASS_CL,ncls_ecpp_in,NCLASS_PR
@@ -306,11 +306,9 @@ subroutine crm_physics_init(pbuf2d)
      if ( any(mm == (/ ixcldliq, ixcldice /)) ) then
         ! mass mixing ratios
         call addfld(cnst_name(mm), (/ 'lev' /), 'A', 'kg/kg   ', cnst_longname(mm))
-        call addfld(sflxnam(mm),   horiz_only,  'A', 'kg/m2/s ', trim(cnst_name(mm))//' surface flux')
      else if ( any(mm == (/ ixnumliq, ixnumice /)) ) then
         ! number concentrations
         call addfld(cnst_name(mm), (/ 'lev' /), 'A', '1/kg    ', cnst_longname(mm))
-        call addfld(sflxnam(mm),   horiz_only,  'A', '1/m2/s  ', trim(cnst_name(mm))//' surface flux')
      else
         call endrun( "crm_physics: Could not call addfld for constituent with unknown units.")
      endif
@@ -351,11 +349,6 @@ subroutine crm_physics_init(pbuf2d)
   call add_default ('SPCLDLOW', 1, ' ')
   call add_default ('SPCLDMED', 1, ' ')
   call add_default ('SPCLDHGH', 1, ' ')
-
-  call addfld(apcnst(ixcldliq), (/ 'lev' /), 'A', 'kg/kg   ', trim(cnst_name(ixcldliq))//' after physics'  )
-  call addfld(bpcnst(ixcldliq), (/ 'lev' /), 'A', 'kg/kg   ', trim(cnst_name(ixcldliq))//' before physics' )
-  call addfld(apcnst(ixcldice), (/ 'lev' /), 'A', 'kg/kg   ', trim(cnst_name(ixcldice))//' after physics'  )
-  call addfld(bpcnst(ixcldice), (/ 'lev' /), 'A', 'kg/kg   ', trim(cnst_name(ixcldice))//' before physics' )
 
   call addfld ('PRES    ',(/ 'lev' /), 'A', 'Pa      ','Pressure'                                )
   call addfld ('DPRES   ',(/ 'lev' /), 'A', 'Pa      ','Pressure thickness of layer'             )

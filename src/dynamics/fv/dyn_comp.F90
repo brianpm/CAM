@@ -60,6 +60,8 @@ use spmd_dyn,           only: spmd_readnl
 use inic_analytic,      only: analytic_ic_active, analytic_ic_set_ic
 use dyn_tests_utils,    only: vc_moist_pressure
 
+use physics_buffer,     only: pbuf_add_field, dtype_r8, pbuf_get_index
+
 use cam_control_mod,    only: initial_run, moist_physics
 use phys_control,       only: phys_setopts
 
@@ -89,11 +91,20 @@ public :: &
    dyn_final,    &
    dyn_import_t, &
    dyn_export_t, &
-   dyn_state,    &
-   frontgf_idx,  &
-   frontga_idx,  &
-   uzm_idx,      &
-   initial_mr
+   dyn_state
+
+! Indices for fields communicated via the physics buffer
+integer, protected, public :: &
+   frontgf_idx = 0, &
+   frontga_idx = 0, &
+   uzm_idx     = 0, &
+   qini_idx    = 0
+
+character(len=3), public, protected :: initial_mr(pcnst) ! constituents initialized with wet or dry mr
+
+character(len=16), public, protected :: tottnam(pcnst)   ! names for horz + vert tendencies
+
+character(len=8), public, protected :: fv_print_dpcoup_warn = "off"
 
 type (t_fvdycore_state), target :: dyn_state
 
@@ -134,22 +145,11 @@ type dyn_export_t
      real(r8), dimension(:,:,:),   pointer :: duf3s  ! U-wind tend. from fixer (staggered)
 end type dyn_export_t
 
+logical :: readvar            ! inquiry flag:  true => variable exists on netCDF file
+
 ! The FV core is always called in its "full physics" mode.  We don't want
 ! the dycore to know what physics package is responsible for the forcing.
 logical, parameter         :: convt = .true.
-
-! Indices for fields that are computed in the dynamics and passed to the physics
-! via the physics buffer
-integer, protected :: frontgf_idx  = -1
-integer, protected :: frontga_idx  = -1
-integer, protected :: uzm_idx = -1
-
-character(len=3), protected :: initial_mr(pcnst) ! constituents initialized with wet or dry mr
-
-logical :: readvar            ! inquiry flag:  true => variable exists on netCDF file
-
-character(len=8)  :: fv_print_dpcoup_warn = "off"
-public            :: fv_print_dpcoup_warn
 
 !=============================================================================================
 CONTAINS
@@ -434,7 +434,6 @@ end subroutine dyn_readnl
 
 subroutine dyn_register()
 
-   use physics_buffer,  only: pbuf_add_field, dtype_r8
    use ppgrid,          only: pcols, pver
    use phys_control,    only: use_gw_front, use_gw_front_igw
    use qbo,             only: qbo_use_forcing
@@ -465,7 +464,7 @@ subroutine dyn_init(dyn_in, dyn_out)
    use physconst,       only: pi, omega, rearth, rair, cpair, zvir
    use infnan,          only: inf, assignment(=)
 
-   use constituents,    only: pcnst, cnst_name, cnst_longname, tottnam, cnst_get_ind
+   use constituents,    only: pcnst, cnst_name, cnst_longname, cnst_get_ind
    use cam_history,     only: addfld, add_default, horiz_only
    use phys_control,    only: phys_getopts
 
@@ -559,7 +558,7 @@ subroutine dyn_init(dyn_in, dyn_out)
    dyn_in%delp   = inf
    dyn_in%tracer = inf
 
-   ! Export object has all of these except phis
+   ! Export object has all of these
    dyn_out%phis   => dyn_in%phis
    dyn_out%ps     => dyn_in%ps
    dyn_out%u3s    => dyn_in%u3s
@@ -613,9 +612,12 @@ subroutine dyn_init(dyn_in, dyn_out)
    end if
 
    dyn_out%peln = inf
-   dyn_out%omga = inf
    dyn_out%mfx  = inf
    dyn_out%mfy  = inf
+   ! Initialize omega to valid value because it's needed in the physics package
+   ! before the dycore has a chance to set it
+   dyn_out%omga = 0.0_r8
+
 
 #if ( defined OFFLINE_DYN )
    call metdata_dyn_init(grid)
@@ -649,6 +651,7 @@ subroutine dyn_init(dyn_in, dyn_out)
       call addfld(trim(cnst_name(m))//'&IC',(/ 'lev' /),'I','kg/kg', cnst_longname(m), gridname='fv_centers')
    end do
    do m = 1, pcnst
+      tottnam(m) = 'TA'//cnst_name(m)
       call addfld(tottnam(m),(/ 'lev' /),'A','kg/kg/s',trim(cnst_name(m))//' horz + vert + fixer tendency ',  &
                   gridname='fv_centers')
    end do
@@ -686,6 +689,9 @@ subroutine dyn_init(dyn_in, dyn_out)
       call add_default(tottnam(ixcldice), budget_hfile_num, ' ')
       call add_default('TTEND   '       , budget_hfile_num, ' ')
    end if
+
+   ! Q at begining of physics package is used in p_d_coupling
+   qini_idx = pbuf_get_index('QINI', errcode=ierr)
 
 end subroutine dyn_init
 
@@ -3017,7 +3023,7 @@ subroutine read_inidat(dyn_in)
     dyn_in%u3s(ifirstxy:ilastxy,jfirstxy,1:km) = 0.0_r8
   end if
 
-  ! These always happen
+  ! This processing happens whether source of IC is analytic or data.
   call process_inidat(grid, dyn_in, 'PS')
   call process_inidat(grid, dyn_in, 'T')
 

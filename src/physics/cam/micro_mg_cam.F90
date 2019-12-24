@@ -81,7 +81,7 @@ use physics_buffer, only: physics_buffer_desc, pbuf_add_field, dyn_time_lvls, &
                           pbuf_get_field, pbuf_set_field, col_type_subcol, &
                           pbuf_register_subcol
 use constituents,   only: cnst_add, cnst_get_ind, &
-                          cnst_name, cnst_longname, sflxnam, apcnst, bpcnst, pcnst
+                          cnst_name, cnst_longname, pcnst
 
 use cldfrc2m,       only: rhmini=>rhmini_const
 
@@ -840,35 +840,14 @@ subroutine micro_mg_cam_init(pbuf2d)
       if ( any(mm == (/ ixcldliq, ixcldice, ixrain, ixsnow, ixgraupel /)) ) then
          ! mass mixing ratios
          call addfld(cnst_name(mm), (/ 'lev' /), 'A', 'kg/kg', cnst_longname(mm)                   )
-         call addfld(sflxnam(mm),    horiz_only, 'A',   'kg/m2/s', trim(cnst_name(mm))//' surface flux')
-      else if ( any(mm == (/ ixnumliq, ixnumice, ixnumrain, ixnumsnow, ixnumgraupel /)) ) then
+      else if ( any(mm == (/ ixnumliq, ixnumice, ixnumrain, ixnumsnow /)) ) then
          ! number concentrations
          call addfld(cnst_name(mm), (/ 'lev' /), 'A', '1/kg', cnst_longname(mm)                   )
-         call addfld(sflxnam(mm),    horiz_only, 'A',   '1/m2/s', trim(cnst_name(mm))//' surface flux')
       else
          call endrun( "micro_mg_cam_init: &
               &Could not call addfld for constituent with unknown units.")
       endif
    end do
-
-   call addfld(apcnst(ixcldliq), (/ 'lev' /), 'A', 'kg/kg', trim(cnst_name(ixcldliq))//' after physics'  )
-   call addfld(apcnst(ixcldice), (/ 'lev' /), 'A', 'kg/kg', trim(cnst_name(ixcldice))//' after physics'  )
-   call addfld(bpcnst(ixcldliq), (/ 'lev' /), 'A', 'kg/kg', trim(cnst_name(ixcldliq))//' before physics' )
-   call addfld(bpcnst(ixcldice), (/ 'lev' /), 'A', 'kg/kg', trim(cnst_name(ixcldice))//' before physics' )
-
-   if (micro_mg_version > 1) then
-      call addfld(apcnst(ixrain), (/ 'lev' /), 'A', 'kg/kg', trim(cnst_name(ixrain))//' after physics'  )
-      call addfld(apcnst(ixsnow), (/ 'lev' /), 'A', 'kg/kg', trim(cnst_name(ixsnow))//' after physics'  )
-      call addfld(bpcnst(ixrain), (/ 'lev' /), 'A', 'kg/kg', trim(cnst_name(ixrain))//' before physics' )
-      call addfld(bpcnst(ixsnow), (/ 'lev' /), 'A', 'kg/kg', trim(cnst_name(ixsnow))//' before physics' )
-   end if
-
-   if (micro_mg_version > 2) then
-      if (micro_mg_do_hail .or. micro_mg_do_graupel) then 
-         call addfld(apcnst(ixgraupel), (/ 'lev' /), 'A', 'kg/kg', trim(cnst_name(ixgraupel))//' after physics'  )
-         call addfld(bpcnst(ixgraupel), (/ 'lev' /), 'A', 'kg/kg', trim(cnst_name(ixgraupel))//' before physics' )
-      endif
-   end if
 
    call addfld ('CME',        (/ 'lev' /), 'A', 'kg/kg/s',  'Rate of cond-evap within the cloud'                      )
    call addfld ('PRODPREC',   (/ 'lev' /), 'A', 'kg/kg/s',  'Rate of conversion of condensate to precip'              )
@@ -1164,24 +1143,14 @@ subroutine micro_mg_cam_init(pbuf2d)
       end if
       call add_default(cnst_name(ixcldliq), budget_histfile, ' ')
       call add_default(cnst_name(ixcldice), budget_histfile, ' ')
-      call add_default(apcnst   (ixcldliq), budget_histfile, ' ')
-      call add_default(apcnst   (ixcldice), budget_histfile, ' ')
-      call add_default(bpcnst   (ixcldliq), budget_histfile, ' ')
-      call add_default(bpcnst   (ixcldice), budget_histfile, ' ')
       if (micro_mg_version > 1) then
          call add_default(cnst_name(ixrain), budget_histfile, ' ')
          call add_default(cnst_name(ixsnow), budget_histfile, ' ')
-         call add_default(apcnst   (ixrain), budget_histfile, ' ')
-         call add_default(apcnst   (ixsnow), budget_histfile, ' ')
-         call add_default(bpcnst   (ixrain), budget_histfile, ' ')
-         call add_default(bpcnst   (ixsnow), budget_histfile, ' ')
       end if
 
       if (micro_mg_version > 2) then
          if (micro_mg_do_hail .or. micro_mg_do_graupel) then 
             call add_default(cnst_name(ixgraupel), budget_histfile, ' ')
-            call add_default(apcnst   (ixgraupel), budget_histfile, ' ')
-            call add_default(bpcnst   (ixgraupel), budget_histfile, ' ')
          endif
       end if
 

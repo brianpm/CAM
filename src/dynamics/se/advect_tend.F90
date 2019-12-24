@@ -1,6 +1,6 @@
 !----------------------------------------------------------------------
 ! this module computes the total advection tendencies of advected
-! constituents for the finite volume dycore
+! constituents for the SE dycore
 !----------------------------------------------------------------------
 module advect_tend
 
@@ -22,9 +22,10 @@ contains
   !   - second call computes and outputs the tendencies
   !----------------------------------------------------------------------
   subroutine compute_adv_tends_xyz(elem,fvm,nets,nete,qn0,n0)
-    use cam_history,            only: outfld, hist_fld_active
+    use cam_history,            only: outfld
     use time_manager,           only: get_step_size
-    use constituents,           only: tottnam,pcnst    
+    use constituents,           only: pcnst    
+    use dyn_comp,               only: tottnam
     use dimensions_mod,         only: nc,np,nlev,ntrac
     use element_mod,            only: element_t
     use fvm_control_volume_mod, only: fvm_struct    
