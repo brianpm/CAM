@@ -583,15 +583,16 @@ end subroutine dyn_final
 
 subroutine read_inidat(dyn_in)
 
-   use cam_mpas_subdriver, only : domain_ptr, cam_mpas_update_halo, cam_mpas_cell_to_edge_winds
-
    ! Set initial conditions.  Either from analytic expressions or read from file.
+
+   use cam_mpas_subdriver, only: domain_ptr, cam_mpas_update_halo, cam_mpas_cell_to_edge_winds
+   use ref_pres,           only: pref_mid
 
    ! arguments
    type(dyn_import_t), target, intent(inout) :: dyn_in
 
    ! Local variables
-   integer :: nCellsSolve
+   integer :: nCellsSolve, nEdgesSolve
    integer :: i, k, kk, m
 
    type(file_desc_t), pointer :: fh_ini
@@ -775,16 +776,14 @@ subroutine read_inidat(dyn_in)
 
       do i = 1, nCellsSolve
          do k = 1, plev
-            theta(k,i) = 250._r8 * (1.0e5_r8 / pmid(k,i))**(rair/cpair)
-            rho(k,i) = pmid(k,i) / (rair * 250._r8)
+            kk = plev - k + 1
+            theta(k,i) = 250._r8 * (1.0e5_r8 / pref_mid(kk))**(rair/cpair)
+            rho(k,i) = pref_mid(kk) / (rair * 250._r8)
          end do
       end do
 
       theta_m(:,1:nCellsSolve) = theta(:,1:nCellsSolve)    ! With no moisture, theta_m := theta
       rho_zz(:,1:nCellsSolve) = rho(:,1:nCellsSolve) / zz(:,1:nCellsSolve)
-     
-
-
 
    end if
 

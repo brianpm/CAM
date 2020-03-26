@@ -71,7 +71,7 @@ public :: &
    dyn_grid_get_colndx, &
    physgrid_copy_attributes_d
 
-! vertical reference heights (m)
+! vertical reference heights (m) in CAM top to bottom order.
 real(r8) :: zw(plevp), zw_mid(plev)
 
 integer ::      &
