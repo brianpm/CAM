@@ -161,10 +161,10 @@ subroutine dyn_grid_init()
       write(iulog,'(a)')' Reference Layer Locations: '
       write(iulog,'(a)')' index      height (m)              pressure (hPa) '
       do k= 1, plev
-         write(iulog,9830) k, zw(k), pref_edge(k)
-         write(iulog,9840)    zw_mid(k), pref_mid(k)
+         write(iulog,9830) k, zw(k), pref_edge(k)/100._r8
+         write(iulog,9840)    zw_mid(k), pref_mid(k)/100._r8
       end do
-      write(iulog,9830) plevp, zw(plevp), pref_edge(plevp)
+      write(iulog,9830) plevp, zw(plevp), pref_edge(plevp)/100._r8
    end if
 
    ! Query global grid dimensions from MPAS

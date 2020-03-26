@@ -637,6 +637,7 @@ subroutine read_inidat(dyn_in)
    fh_ini  => initial_file_get_id()
 
    nCellsSolve = dyn_in % nCellsSolve
+   nEdgesSolve = dyn_in % nEdgesSolve
    
    uperp    => dyn_in % uperp
    w        => dyn_in % w
@@ -753,7 +754,7 @@ subroutine read_inidat(dyn_in)
 
       do i = 1, nCellsSolve
          do k = 1, plev
-            theta(k,i) = t(k,i) * (1.0e5 / pmid(k,i))**(rair/cpair)
+            theta(k,i) = t(k,i) * (1.0e5_r8 / pmid(k,i))**(rair/cpair)
             rho(k,i) = pmid(k,i) / (rair * t(k,i))
          end do
       end do
@@ -761,21 +762,40 @@ subroutine read_inidat(dyn_in)
       theta_m(:,1:nCellsSolve) = theta(:,1:nCellsSolve)    ! With no moisture, theta_m := theta
       rho_zz(:,1:nCellsSolve) = rho(:,1:nCellsSolve) / zz(:,1:nCellsSolve)
 
-      ! Update halos for initial state fields
-
-      call cam_mpas_update_halo('u')         ! u is the name of uperp in the MPAS state pool
-      call cam_mpas_update_halo('w')
-      call cam_mpas_update_halo('scalars')   ! scalars is the name of tracers in the MPAS state pool
-      call cam_mpas_update_halo('theta_m')
-      call cam_mpas_update_halo('theta')
-      call cam_mpas_update_halo('rho_zz')
-      call cam_mpas_update_halo('rho')
-
    else
 
-      call endrun(subname//': reading initial data not implemented')
+      uperp(:,1:nEdgesSolve) = 0.0_r8
+
+      w(:,1:nCellsSolve) = 0.0_r8
+
+      do m = 1, pcnst
+         ! will need translation between MPAS and CAM constituent indexing
+         tracers(m,:,1:nCellsSolve) = 0.0_r8
+      end do
+
+      do i = 1, nCellsSolve
+         do k = 1, plev
+            theta(k,i) = 250._r8 * (1.0e5_r8 / pmid(k,i))**(rair/cpair)
+            rho(k,i) = pmid(k,i) / (rair * 250._r8)
+         end do
+      end do
+
+      theta_m(:,1:nCellsSolve) = theta(:,1:nCellsSolve)    ! With no moisture, theta_m := theta
+      rho_zz(:,1:nCellsSolve) = rho(:,1:nCellsSolve) / zz(:,1:nCellsSolve)
+     
+
+
+
    end if
 
+   ! Update halos for initial state fields
+   call cam_mpas_update_halo('u')         ! u is the name of uperp in the MPAS state pool
+   call cam_mpas_update_halo('w')
+   call cam_mpas_update_halo('scalars')   ! scalars is the name of tracers in the MPAS state pool
+   call cam_mpas_update_halo('theta_m')
+   call cam_mpas_update_halo('theta')
+   call cam_mpas_update_halo('rho_zz')
+   call cam_mpas_update_halo('rho')
 
 end subroutine read_inidat
 
