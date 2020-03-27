@@ -765,7 +765,14 @@ subroutine read_inidat(dyn_in)
 
    else
 
-      uperp(:,1:nEdgesSolve) = 0.0_r8
+      ux = 0._r8
+      uy = 0._r8
+
+      ! Compute uperp by projecting ux and uy from cell centers to edges
+      call cam_mpas_update_halo('uReconstructZonal')       ! ux => uReconstructZonal
+      call cam_mpas_update_halo('uReconstructMeridional')  ! uy => uReconstructMeridional
+      call cam_mpas_cell_to_edge_winds(dyn_in % nEdges, ux, uy, dyn_in % east, dyn_in % north, &
+                                       dyn_in % normal, dyn_in % cellsOnEdge, uperp)
 
       w(:,1:nCellsSolve) = 0.0_r8
 
