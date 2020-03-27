@@ -415,7 +415,8 @@ subroutine dyn_init(dyn_in, dyn_out)
 
       ! Initialize dyn_out from dyn_in since it is needed to run the physics package
       ! as part of the CAM initialization before a dycore step is taken.
-      dyn_out % uperp(:,:nCellsSolve)     = dyn_in % uperp(:,:nCellsSolve)
+      dyn_out % ux(:,:nCellsSolve)        = dyn_in % ux(:,:nCellsSolve)
+      dyn_out % uy(:,:nCellsSolve)        = dyn_in % uy(:,:nCellsSolve)
       dyn_out % w(:,:nCellsSolve)         = dyn_in % w(:,:nCellsSolve)
       dyn_out % theta_m(:,:nCellsSolve)   = dyn_in % theta_m(:,:nCellsSolve)
       dyn_out % rho_zz(:,:nCellsSolve)    = dyn_in % rho_zz(:,:nCellsSolve)
@@ -424,6 +425,14 @@ subroutine dyn_init(dyn_in, dyn_out)
    end if
 
    call cam_mpas_init_phase4(endrun)
+
+!++dbg
+   call addfld ('u_in',   (/ 'lev' /),  'A', 'm/s', 'uperp input', gridname='mpas_edge')
+   call addfld ('w_in',   (/ 'ilev' /), 'A', 'm/s', 'w input', gridname='mpas_cell')
+   call addfld ('th_in',  (/ 'lev' /),  'A', 'K', 'theta_m input', gridname='mpas_cell')
+   call addfld ('rho_in', (/ 'lev' /),  'A', 'kg/m^3', 'rho_zz input', gridname='mpas_cell')
+   call addfld ('q_in',   (/ 'lev' /),  'A', 'kg/kg', 'qv input', gridname='mpas_cell')
+!--dbg
 
 end subroutine dyn_init
 
@@ -435,6 +444,9 @@ subroutine dyn_run(dyn_in, dyn_out)
    use mpas_timekeeping, only : MPAS_TimeInterval_type, MPAS_set_timeInterval
    use mpas_pool_routines, only : mpas_pool_get_config
    use time_manager, only : get_step_size
+!++dbg
+
+!--dbg
 
    ! Advances the dynamics state provided in dyn_in by one physics
    ! timestep to produce dynamics state held in dyn_out.
@@ -451,6 +463,11 @@ subroutine dyn_run(dyn_in, dyn_out)
    character(len=128) :: errmsg
 
    character(len=*), parameter :: subname = 'dyn_comp::dyn_run'
+!++dbg
+integer :: i, k, kk
+integer :: nCellsSolve, nEdgesSolve
+real(r8), allocatable :: arr2d(:,:)
+!--dbg
    !----------------------------------------------------------------------------
 
    MPAS_DEBUG_WRITE(0, 'begin '//subname)
@@ -490,10 +507,22 @@ subroutine dyn_run(dyn_in, dyn_out)
                   ' We should fix this.')
    end if
 
-   !
+!++dbg
+   nCellsSolve = dyn_in%nCellsSolve
+   nEdgesSolve = dyn_in%nEdgesSolve
+
+   allocate(arr2d(nEdgesSolve,plev))
+   do k = 1, plev
+      kk = plev - k + 1
+      do i = 1, nCellsSolve
+         arr2d(i,k) = dyn_in%uperp(kk,i)
+      end do
+   end do
+   call outfld('u_in', arr2d, nEdgesSolve, 1)
+!--dbg
+
    ! Call the MPAS-A dycore
-   !
-   call cam_mpas_run(integrationLength)
+!   call cam_mpas_run(integrationLength)
 
 end subroutine dyn_run
 
