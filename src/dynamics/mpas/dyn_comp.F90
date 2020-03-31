@@ -514,11 +514,50 @@ real(r8), allocatable :: arr2d(:,:)
    allocate(arr2d(nEdgesSolve,plev))
    do k = 1, plev
       kk = plev - k + 1
-      do i = 1, nCellsSolve
+      do i = 1, nEdgesSolve
          arr2d(i,k) = dyn_in%uperp(kk,i)
       end do
    end do
    call outfld('u_in', arr2d, nEdgesSolve, 1)
+   deallocate(arr2d)
+
+   allocate(arr2d(nCellsSolve,plevp))
+   do k = 1, plevp
+      kk = plevp - k + 1
+      do i = 1, nCellsSolve
+         arr2d(i,k) = dyn_in%w(kk,i)
+      end do
+   end do
+   call outfld('w_in', arr2d, nCellsSolve, 1)
+   deallocate(arr2d)
+
+   allocate(arr2d(nCellsSolve,plev))
+
+   do k = 1, plev
+      kk = plev - k + 1
+      do i = 1, nCellsSolve
+         arr2d(i,k) = dyn_in%theta_m(kk,i)
+      end do
+   end do
+   call outfld('th_in', arr2d, nCellsSolve, 1)
+
+   do k = 1, plev
+      kk = plev - k + 1
+      do i = 1, nCellsSolve
+         arr2d(i,k) = dyn_in%rho_zz(kk,i)
+      end do
+   end do
+   call outfld('rho_in', arr2d, nCellsSolve, 1)
+
+   do k = 1, plev
+      kk = plev - k + 1
+      do i = 1, nCellsSolve
+         arr2d(i,k) = dyn_in%tracers(1,kk,i)
+      end do
+   end do
+   call outfld('q_in', arr2d, nCellsSolve, 1)
+
+   deallocate(arr2d)
 !--dbg
 
    ! Call the MPAS-A dycore
