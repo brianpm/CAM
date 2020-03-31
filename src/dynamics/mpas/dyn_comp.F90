@@ -833,6 +833,9 @@ subroutine read_inidat(dyn_in)
 
    else
 
+      ! start by setting the fields that will be read from an initial file
+      ! to the same values as the HS analytic ICs
+
       ux = 0._r8
       uy = 0._r8
 
@@ -849,11 +852,26 @@ subroutine read_inidat(dyn_in)
          tracers(m,:,1:nCellsSolve) = 0.0_r8
       end do
 
+      t = 250._r8
+
+      pintdry(1,:) = 1.0e5_r8 
+
+      ! Use Hypsometric eqn to set pressure profiles
+      do i = 1, nCellsSolve
+         do k = 2, plevp
+            dz = zint(k,i) - zint(k-1,i)
+            h = rair * t(k-1,i) / gravit
+            pintdry(k,i) = pintdry(k-1,i)*exp(-dz/h)
+            pmiddry(k-1,i) = 0.5_r8*(pintdry(k-1,i) + pintdry(k,i))
+            ! for now assume dry atm
+            pmid(k-1,i) = pmiddry(k-1,i)
+         end do
+      end do
+
       do i = 1, nCellsSolve
          do k = 1, plev
-            kk = plev - k + 1
-            theta(k,i) = 250._r8 * (1.0e5_r8 / pref_mid(kk))**(rair/cpair)
-            rho(k,i) = pref_mid(kk) / (rair * 250._r8)
+            theta(k,i) = t(k,i) * (1.0e5_r8 / pmid(k,i))**(rair/cpair)
+            rho(k,i) = pmid(k,i) / (rair * t(k,i))
          end do
       end do
 
