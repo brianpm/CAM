@@ -742,7 +742,6 @@ subroutine read_inidat(dyn_in)
       pintdry(plevp,nCellsSolve),      &
       pmiddry(plev,nCellsSolve),       &
       pmid(plev,nCellsSolve) )
-      mpas_3d(plev,nEdgesSolve,1) )
 
    if (analytic_ic_active()) then
 
@@ -845,7 +844,7 @@ subroutine read_inidat(dyn_in)
       !call cam_mpas_cell_to_edge_winds(dyn_in % nEdges, ux, uy, dyn_in % east, dyn_in % north, &
       !                                 dyn_in % normal, dyn_in % cellsOnEdge, uperp)
 
-      allocate( mpas_3d(plev,nEdgesSolve,1) )
+      allocate( mpas3d(plev,nEdgesSolve,1) )
 
       ! read uperp
       call infld('u', fh_ini, 'nVertLevels', 'nEdges', 1, plev, 1, nEdgesSolve, 1, 1, &
