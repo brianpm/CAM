@@ -849,9 +849,23 @@ subroutine read_inidat(dyn_in)
       ! read uperp
       call infld('u', fh_ini, 'nVertLevels', 'nEdges', 1, plev, 1, nEdgesSolve, 1, 1, &
                  mpas3d, readvar, gridname='mpas_edge')
-      uperp(:,:nEdgesSolve) = mpas3d(:,:nEdgesSolve,1)
+      if (readvar) then
+         uperp(:,:nEdgesSolve) = mpas3d(:,:nEdgesSolve,1)
+      else
+         call endrun(subname//': failed to read u from initial file')
+      end if
+      deallocate( mpas3d )
 
-      w(:,1:nCellsSolve) = 0.0_r8
+      !w(:,1:nCellsSolve) = 0.0_r8
+      ! read w
+      allocate( mpas3d(plevp,nCellsSolve,1) )
+      call infld('w', fh_ini, 'nVertLevelsP1', 'nCells', 1, plevp, 1, nCellsSolve, 1, 1, &
+                 mpas3d, readvar, gridname='mpas_cell')
+      if (readvar) then
+         w(:,1:nCellsSolve) = mpas3d(:,:nCellsSolve,1)
+      else
+         call endrun(subname//': failed to read w from initial file')
+      end if
 
       do m = 1, pcnst
          ! will need translation between MPAS and CAM constituent indexing
