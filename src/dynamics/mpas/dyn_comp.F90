@@ -561,7 +561,7 @@ real(r8), allocatable :: arr2d(:,:)
 !--dbg
 
    ! Call the MPAS-A dycore
-!   call cam_mpas_run(integrationLength)
+   call cam_mpas_run(integrationLength)
 
 end subroutine dyn_run
 
