@@ -444,9 +444,6 @@ subroutine dyn_run(dyn_in, dyn_out)
    use mpas_timekeeping, only : MPAS_TimeInterval_type, MPAS_set_timeInterval
    use mpas_pool_routines, only : mpas_pool_get_config
    use time_manager, only : get_step_size
-!++dbg
-
-!--dbg
 
    ! Advances the dynamics state provided in dyn_in by one physics
    ! timestep to produce dynamics state held in dyn_out.
@@ -654,7 +651,6 @@ subroutine read_inidat(dyn_in)
    ! Set initial conditions.  Either from analytic expressions or read from file.
 
    use cam_mpas_subdriver, only: domain_ptr, cam_mpas_update_halo, cam_mpas_cell_to_edge_winds
-   use ref_pres,           only: pref_mid
 
    ! arguments
    type(dyn_import_t), target, intent(inout) :: dyn_in
@@ -695,8 +691,10 @@ subroutine read_inidat(dyn_in)
    real(r8), allocatable :: pintdry(:,:) ! dry interface pressures
    real(r8), allocatable :: pmiddry(:,:) ! dry midpoint pressures
    real(r8), allocatable :: pmid(:,:)    ! midpoint pressures
+   real(r8), allocatable :: mpas3d(:,:,:)
 
    real(r8) :: dz, h
+   logical  :: readvar
 
    character(len=*), parameter :: subname = 'dyn_comp:read_inidat'
    !--------------------------------------------------------------------------------------
@@ -743,7 +741,8 @@ subroutine read_inidat(dyn_in)
       t(plev,nCellsSolve),             &
       pintdry(plevp,nCellsSolve),      &
       pmiddry(plev,nCellsSolve),       &
-      pmid(plev,nCellsSolve) )
+      pmid(plev,nCellsSolve),          &
+      mpas3d(plev,nCellsSolve,1) )
 
    if (analytic_ic_active()) then
 
@@ -839,11 +838,17 @@ subroutine read_inidat(dyn_in)
       ux = 0._r8
       uy = 0._r8
 
-      ! Compute uperp by projecting ux and uy from cell centers to edges
       call cam_mpas_update_halo('uReconstructZonal')       ! ux => uReconstructZonal
       call cam_mpas_update_halo('uReconstructMeridional')  ! uy => uReconstructMeridional
-      call cam_mpas_cell_to_edge_winds(dyn_in % nEdges, ux, uy, dyn_in % east, dyn_in % north, &
-                                       dyn_in % normal, dyn_in % cellsOnEdge, uperp)
+
+      ! Compute uperp by projecting ux and uy from cell centers to edges
+      !call cam_mpas_cell_to_edge_winds(dyn_in % nEdges, ux, uy, dyn_in % east, dyn_in % north, &
+      !                                 dyn_in % normal, dyn_in % cellsOnEdge, uperp)
+
+      ! read uperp
+      call infld('u', fh_ini, 'nVertLevels', 'nEdges', 1, plev, 1, nEdgesSolve, 1, 1, &
+                 mpas3d, readvar, gridname='mpas_edge')
+      uperp = mpas3d(:,:,1)
 
       w(:,1:nCellsSolve) = 0.0_r8
 

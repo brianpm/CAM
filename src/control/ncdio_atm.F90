@@ -27,7 +27,10 @@ module ncdio_atm
 
   save
 
-  logical :: debug = .false.
+!++dbg
+!  logical :: debug = .false.
+  logical :: debug = .true.
+!--dbg
 
   !
   !EOP
