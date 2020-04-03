@@ -1033,6 +1033,14 @@ contains
     integer                                   :: gridid
     character(len=128)                        :: errormsg
 
+!++dbg
+    if(masterproc)then
+       print*,'field_lens:',field_lens
+       print*,'file_lens:',file_lens
+       if(present(field_dnames))print*,'field_dnames:',field_dnames
+       if(present(file_dnames))print*,'file_dnames:',file_dnames
+    endif
+!--dbg
     gridid = get_cam_grid_index(id)
     if (gridid > 0) then
       call cam_grids(gridid)%get_decomp(field_lens, file_lens, dtype, iodesc, &
@@ -2941,6 +2949,14 @@ contains
     logical                                   :: is_perm
     character(len=128)                        :: errormsg
 
+!++dbg
+    if(masterproc)then
+       print*,'field_lens:', field_lens
+       print*,'file_lens:', file_lens
+       if(present(field_dnames))print*,'field_dnames:', field_dnames
+       if(present(file_dnames))print*,'file_dnames:', file_dnames
+    endif
+!--dbg
     nullify(src_in)
     nullify(dest_in)
     is_perm = .false.

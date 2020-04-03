@@ -501,6 +501,15 @@ contains
     type(iodesc_list),         pointer             :: iodesc_p
     character(len=errormsg_str_len)                :: errormsg
 
+!++dbg
+    if(masterproc)then
+       print*,'ldims:',ldims
+       print*,'fdims:',fdims
+       if(present(field_dist_in)) print*,'field_dist_in',field_dist_in
+       if(present(file_dist_in)) print*,'file_dist_in',file_dist_in
+       if(present(permute)) print*,'permute',permute
+    endif
+!--dbg
     call t_startf('get_decomp')
 
     nullify(iodesc_p)

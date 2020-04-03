@@ -676,6 +676,15 @@ contains
     integer                       :: i1, i2, i3, i4, i5, i6, i7
     integer                       :: i(7)
 
+!++dbg
+    if(masterproc)then
+       print*,'fieldlens:', fieldlens
+       print*,'filelens:', filelens
+       if (present(src_in)) print*,'src_in:',src_in
+       if (present(dest_in)) print*,'dest_in:',dest_in
+       if (present(permutation_in)) print*,'permutation_in:',permutation_in
+    endif
+!--dbg
     ! This shouldn't happen but, who knows what evil lurks in the hearts of SEs
     if (associated(filemap)) then
       deallocate(filemap)
