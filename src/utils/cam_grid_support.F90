@@ -1037,8 +1037,10 @@ contains
     if(masterproc)then
        print*,'field_lens:',field_lens
        print*,'file_lens:',file_lens
-       if(present(field_dnames))print*,'field_dnames:',field_dnames
-       if(present(file_dnames))print*,'file_dnames:',file_dnames
+       if(present(field_dnames))print*,'cam_grid_get_decomp:field_dnames: ',trim(field_dnames(1)),&
+          ' : ',trim(field_dnames(2))
+       if(present(file_dnames))print*,'cam_grid_get_decomp:file_dnames: ',trim(file_dnames(1)), &
+          ' : ',trim(file_dnames(2))
     endif
 !--dbg
     gridid = get_cam_grid_index(id)
@@ -2862,6 +2864,12 @@ contains
     character(len=max_hcoordname_len)         :: coord_dimnames(2)
 
     call this%dim_names(coord_dimnames(1), coord_dimnames(2))
+!++dbg
+    if(masterproc)then
+       print*,'find_src_dims:coord_dimnames: ',trim(coord_dimnames(1)),' : ',&
+          trim(coord_dimnames(2))
+    endif
+!--dbg
     if (associated(src_out)) then
       deallocate(src_out)
       nullify(src_out)
@@ -2953,8 +2961,10 @@ contains
     if(masterproc)then
        print*,'field_lens:', field_lens
        print*,'file_lens:', file_lens
-       if(present(field_dnames))print*,'field_dnames:', field_dnames
-       if(present(file_dnames))print*,'file_dnames:', file_dnames
+       if(present(field_dnames))print*,'cam_grid_get_pio_decomp:field_dnames:', &
+          trim(field_dnames(1)),' : ',trim(field_dnames(2))
+       if(present(file_dnames))print*,'cam_grid_get_pio_decomp:file_dnames:', &
+          trim(file_dnames(1)),' : ',trim(file_dnames(2))
     endif
 !--dbg
     nullify(src_in)

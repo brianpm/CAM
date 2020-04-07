@@ -554,9 +554,22 @@ contains
     ! Local variables
     integer                                  :: d(max_dests)
 
+!++dbg
+    integer :: ndest
+
+!    if(masterproc)then
+!       print*,'cam_filemap_mapVal: index: ', index
+!       print*,'cam_filemap_mapVal: dsize: ', dsize
+!       if(present(dest_in)) print*,'cam_filemap_mapVal: dest_in: ', dest_in
+!    endif
+!--dbg
     if (associated(this%map)) then
       if (present(dest_in)) then
-        d = dest_in
+!++dbg
+!        d = dest_in
+         ndest = size(dest_in)
+        d(:ndest) = dest_in(:ndest)
+!--dbg
       else
         d = this%dest
       end if
@@ -793,6 +806,17 @@ contains
       end do
     end if
        
+!++dbg
+    if(masterproc)then
+       print*,'cam_filemap_get_filemap: mapind:',mapind
+       print*,'cam_filemap_get_filemap: mapPos:',mapPos
+       print*,'cam_filemap_get_filemap: mapcnt:',mapcnt
+       print*,'cam_filemap_get_filemap: mapsize:',mapsize
+       print*,'cam_filemap_get_filemap: num_mapped:',this%num_mapped()
+       print*,'cam_filemap_get_filemap: dsize:',dsize
+       print*,'cam_filemap_get_filemap: src_ind:',src_ind
+    endif
+!--dbg
     ! Step through the map and fill in local positions for each entry
     fmind = 1
     do i7 = 1, srclens(7)
