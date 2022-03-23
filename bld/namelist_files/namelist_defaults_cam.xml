@@ -33,6 +33,7 @@
 <dtime dyn="se"    hgrid="ne0np4CONUS.ne30x8">225</dtime>
 <dtime dyn="se"    hgrid="ne0np4.ARCTIC.ne30x4">450</dtime>
 <dtime dyn="se"    hgrid="ne0np4.ARCTICGRIS.ne30x8">225</dtime>
+<dtime dyn="se"    hgrid="ne0np4.trbelt.ne30x8">225</dtime>
 
 <dtime dyn="mpas"                  >1800</dtime>
 
@@ -237,6 +238,7 @@
 <ncdata dyn="se" hgrid="ne0np4CONUS.ne30x8"       nlev="32" ic_ymd="101">atm/cam/inic/se/F2000climo_CONUS_30x8_mt12_mg3_01-01-00000_c200421.nc</ncdata>
 <ncdata dyn="se" hgrid="ne0np4.ARCTIC.ne30x4"     nlev="32" ic_ymd="101">atm/cam/inic/se/FHIST_ARCTIC_ne30x4_mt12_1979bc-mg3_01-01-00000_c200424.nc</ncdata>
 <ncdata dyn="se" hgrid="ne0np4.ARCTICGRIS.ne30x8" nlev="32" ic_ymd="101">atm/cam/inic/se/FHIST_ARCTICGRIS_ne30x8_mt12_1979bc-mg3_01-01-00000_c200428.nc</ncdata>
+<ncdata dyn="se" hgrid="ne0np4.trbelt.ne30x8" nlev="32" ic_ymd="101">/glade/work/brianpm/VRM/ne0np4.trbelt.ne30x8/inic/cami-mam4_0000-01-01_ne0np4.trbelt.ne30x8_L32_c210414.nc</ncdata>
 
 <ncdata dyn="se" hgrid="ne5np4"   nlev="66"           ic_ymd="101">atm/waccm/ic/wa3_ne5np4_1950_spinup.cam2.i.1960-01-01-00000_c150810.nc</ncdata>
 <ncdata dyn="se" hgrid="ne30np4"  nlev="70"           ic_ymd="101">atm/waccm/ic/FW2000_ne30_L70_01-01-0001_c200602.nc</ncdata>
@@ -299,6 +301,7 @@
 <bnd_topo hgrid="ne0np4CONUS.ne30x8"       >atm/cam/topo/se/ne30x8_CONUS_nc3000_Co060_Fi001_MulG_PF_RR_Nsw042_c200428.nc</bnd_topo>
 <bnd_topo hgrid="ne0np4.ARCTIC.ne30x4"     >atm/cam/topo/se/ne30x4_ARCTIC_nc3000_Co060_Fi001_MulG_PF_RR_Nsw042_c200428.nc</bnd_topo>
 <bnd_topo hgrid="ne0np4.ARCTICGRIS.ne30x8" >atm/cam/topo/se/ne30x8_ARCTICGRIS_nc3000_Co060_Fi001_MulG_PF_RR_Nsw042_c200428.nc</bnd_topo>
+<bnd_topo hgrid="ne0np4.trbelt.ne30x8" >/glade/work/brianpm/VRM/ne0np4.trbelt.ne30x8/topo/topo_ne0np4.trbelt.ne30x8_blin_210414.nc</bnd_topo>
 
 <bnd_topo hgrid="mpasa120" >atm/cam/topo/mpas/mpas_120_nc3000_Co060_Fi001_MulG_PF_Nsw042_c200921.nc</bnd_topo>
 
@@ -318,6 +321,7 @@
 <se_mesh_file hgrid="ne0np4TESTONLY.ne5x4"    >atm/cam/coords/ne0np4EQFACE.ne5x4.g</se_mesh_file>
 <se_mesh_file hgrid="ne0np4.ARCTIC.ne30x4"    >atm/cam/coords/ne30x4_EXODUS_ARCTIC_c191009.g</se_mesh_file>
 <se_mesh_file hgrid="ne0np4.ARCTICGRIS.ne30x8">atm/cam/coords/ne30x8_EXODUS_ARCTICGRIS_c191209.g</se_mesh_file>
+<se_mesh_file hgrid="ne0np4.trbelt.ne30x8">/glade/work/brianpm/VRM/ne0np4.trbelt.ne30x8/grids/ne0np4.trbelt01.ne30x8_EXODUS.nc</se_mesh_file>
 
 <!-- Analytic ICs  -->
 <analytic_ic_type                   > none </analytic_ic_type>
@@ -1769,6 +1773,7 @@
 <drydep_srf_file hgrid="ne0np4CONUS.ne30x8"      >atm/cam/chem/trop_mam/atmsrf_ne0np4conus30x8_161116.nc</drydep_srf_file>
 <drydep_srf_file hgrid="ne0np4.ARCTIC.ne30x4"    >atm/cam/chem/trop_mam/atmsrf_ne30x4_ARCTIC_191011.nc</drydep_srf_file>
 <drydep_srf_file hgrid="ne0np4.ARCTICGRIS.ne30x8">atm/cam/chem/trop_mam/atmsrf_ne30x8_ARCTICGRIS_191212.nc</drydep_srf_file>
+<drydep_srf_file hgrid="ne0np4.trbelt.ne30x8">/glade/work/brianpm/VRM/ne0np4.trbelt.ne30x8/atmsrf/atmsrf_ne0np4.trbelt.ne30x8_210414.nc</drydep_srf_file>
 
 <drydep_srf_file hgrid="C24">atm/cam/chem/trop_mam/atmsrf_C24_c200625.nc</drydep_srf_file>
 <drydep_srf_file hgrid="C48">atm/cam/chem/trop_mam/atmsrf_C48_c200625.nc</drydep_srf_file>
@@ -1867,6 +1872,8 @@
 <clubb_timestep  hgrid="ne0np4CONUS.ne30x8"       > 75.0D0 </clubb_timestep>
 <clubb_timestep  hgrid="ne0np4.ARCTIC.ne30x4"     > 150.0D0 </clubb_timestep>
 <clubb_timestep  hgrid="ne0np4.ARCTICGRIS.ne30x8" > 75.0D0 </clubb_timestep>
+<clubb_timestep  hgrid="ne0np4.trbelt.ne30x8" > 75.0D0 </clubb_timestep>
+
 
 <clubb_c1                                         > 1.0     </clubb_c1>
 <clubb_c1b                                        > 1.0     </clubb_c1b>
@@ -2801,6 +2808,7 @@
 <se_refined_mesh hgrid="ne0np4TESTONLY.ne5x4" > .true. </se_refined_mesh>
 <se_refined_mesh hgrid="ne0np4.ARCTIC.ne30x4" > .true. </se_refined_mesh>
 <se_refined_mesh hgrid="ne0np4.ARCTICGRIS.ne30x8" > .true. </se_refined_mesh>
+<se_refined_mesh hgrid="ne0np4.trbelt.ne30x8" > .true. </se_refined_mesh>
 
 <se_nsplit>                   2 </se_nsplit>
 <se_nsplit hgrid="ne16np4" >  1 </se_nsplit>
