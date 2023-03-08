@@ -263,11 +263,7 @@ contains
     ngpt  = k_dist%get_ngpt()
     nband = k_dist%get_nband()
 
-    !$acc kernels copyout(top_at_1)
-    !$omp target map(from:top_at_1)
-    top_at_1 = p_lay(1, 1) < p_lay(1, nlay)
-    !$acc end kernels
-    !$omp end target
+    top_at_1 = p_lay(1, 1) < p_lay(1, nlay) ! removed GPU directives around this line.
 
     ! ------------------------------------------------------------------------------------
     !  Error checking
