@@ -463,6 +463,7 @@ subroutine radiation_init(pbuf2d)
    use modal_aer_opt,   only: modal_aer_opt_init
    use rrtmgp_inputs,   only: rrtmgp_inputs_init
    use time_manager,    only: is_first_step
+   use radconstants,    only: set_number_sw_bands, set_number_lw_bands
 
    ! arguments
    type(physics_buffer_desc), pointer :: pbuf2d(:,:)
@@ -521,6 +522,24 @@ subroutine radiation_init(pbuf2d)
    ! kbotradm = nlay
    ! kbotradi = nlay + 1
 
+   call set_available_gases(active_gases, available_gases) ! gases needed to initialize spectral info
+
+   ! initialize relevant data
+   call rad_solar_var_init() ! sets the total solar irradiance (I wonder whether this should use kdist information instead of radconstants; alternative use kdist%set_tsi to ensure consistency?)
+   call rrtmgp_inputs_init(ktopcamm, ktopradm, ktopcami, ktopradi) ! this sets these values as module data in rrtmgp_inputs
+
+   call coefs_init(coefs_lw_file, kdist_lw, available_gases, band2gpt_lw)
+   call coefs_init(coefs_sw_file, kdist_sw, available_gases, band2gpt_sw) ! bpm : these now provide band2gpt which should be global
+
+   call set_number_sw_bands(kdist_sw%get_nband()) ! set nswbands in radconstants
+   call set_number_lw_bands(kdist_lw%get_nband()) ! set nlwbands in radconstants
+
+   call rad_data_init(pbuf2d)  ! initialize output fields for offline driver
+   call cloud_rad_props_init()
+  
+   ngpt_lw = kdist_lw%get_ngpt() ! these set global values
+   ngpt_sw = kdist_sw%get_ngpt()
+
    ! bpm: set the indices used for diagnostics using specific band:
    call get_idx_sw_diag() ! index to sw visible band (441 - 625 nm) 
    call get_idx_nir_diag() ! index to sw near infrared (778-1240 nm) band
@@ -530,21 +549,6 @@ subroutine radiation_init(pbuf2d)
       lw_cloudsim_band = get_band_index_by_value('lw', 10.5_r8, 'micron')
    end if
    call get_idx_lw_diag()
-
-
-   call set_available_gases(active_gases, available_gases) ! gases needed to initialize spectral info
-
-   ! initialize relevant data
-   call rad_solar_var_init() ! sets the total solar irradiance (I wonder whether this should use kdist information instead of radconstants; alternative use kdist%set_tsi to ensure consistency?)
-   call rrtmgp_inputs_init(ktopcamm, ktopradm, ktopcami, ktopradi) ! this sets these values as module data in rrtmgp_inputs
-
-   call coefs_init(coefs_lw_file, kdist_lw, available_gases, band2gpt_lw)
-   call coefs_init(coefs_sw_file, kdist_sw, available_gases, band2gpt_sw) ! bpm : these now provide band2gpt which should be global
-   call rad_data_init(pbuf2d)  ! initialize output fields for offline driver
-   call cloud_rad_props_init()
-  
-   ngpt_lw = kdist_lw%get_ngpt() ! these set global values
-   ngpt_sw = kdist_sw%get_ngpt()
 
 
    if (is_first_step()) then
@@ -592,6 +596,7 @@ subroutine radiation_init(pbuf2d)
    else
       cosp_cnt(begchunk:endchunk) = 0     
    end if
+
 
    ! Add fields to history buffer
 

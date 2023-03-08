@@ -20,10 +20,15 @@ implicit none
 private
 save
 
+! Number of bands in SW and LW (these will be set when RRTMGP initializes)
+! number of shorwave spectral intervals
+integer, parameter, public :: nswbands
+! number of lw bands
+integer, parameter, public :: nlwbands
+
+
 ! SHORTWAVE DATA
 
-! number of shorwave spectral intervals
-integer, parameter, public :: nswbands = 14
 
 ! Wavenumbers of band boundaries
 !
@@ -99,8 +104,6 @@ integer, parameter, public :: nrh = 1000
 ! integer, parameter, public :: idx_lw_diag = 7 ! index to (H20 window) LW band
 integer, public :: idx_lw_diag
 
-! number of lw bands
-integer, parameter, public :: nlwbands = 16
 
 real(r8), parameter :: wavenumber1_longwave(nlwbands) = &! Longwave spectral band limits (cm-1)
     (/   10._r8,  350._r8, 500._r8,   630._r8,  700._r8,  820._r8,  980._r8, 1080._r8, &
@@ -171,12 +174,35 @@ end subroutine get_ref_solar_band_irrad
 !------------------------------------------------------------------------------
 subroutine get_number_sw_bands(number_of_bands)
 
-   ! number of solar (shortwave) bands in the rrtmg code
+   ! number of solar (shortwave) bands
    integer, intent(out) :: number_of_bands
 
    number_of_bands = nswbands
 
 end subroutine get_number_sw_bands
+!------------------------------------------------------------------------------
+subroutine set_number_sw_bands(number_of_bands)
+   ! this sets module data nswbands
+   ! expect: number_of_bands provided from RRTMGP optical properties object
+   integer, intent(in) :: number_of_bands
+   nswbands = number_of_bands
+end subroutine set_number_sw_bands
+!------------------------------------------------------------------------------
+subroutine get_number_lw_bands(number_of_bands)
+
+   ! number of longwave bands
+   integer, intent(out) :: number_of_bands
+
+   number_of_bands = nlwbands
+
+end subroutine get_number_lw_bands
+!------------------------------------------------------------------------------
+subroutine set_number_lw_bands(number_of_bands)
+   ! this sets module data nlwbands
+   ! expect: number_of_bands provided from RRTMGP optical properties object
+   integer, intent(in) :: number_of_bands
+   nlwbands = number_of_bands
+end subroutine set_number_lw_bands
 
 !------------------------------------------------------------------------------
 subroutine get_lw_spectral_boundaries(low_boundaries, high_boundaries, units)
